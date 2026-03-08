@@ -1,12 +1,103 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { Navbar } from '@/components/Navbar';
+import { DrugSearchBar } from '@/components/DrugSearchBar';
+import { CitySelector } from '@/components/CitySelector';
+import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Search, MapPin, Phone, Building2, Pill, Activity } from 'lucide-react';
+
+const stats = [
+  { label: 'Pharmacies', value: '300+', icon: Building2 },
+  { label: 'Medicines', value: '20+', icon: Pill },
+  { label: 'Updates', value: 'Live', icon: Activity },
+];
+
+const steps = [
+  { icon: Search, title: 'Search your medicine', description: 'Type any drug name, brand, or generic — we find it instantly.' },
+  { icon: MapPin, title: 'See nearest pharmacies', description: 'View which pharmacies near you have it in stock, with prices.' },
+  { icon: Phone, title: 'Call or visit', description: 'Get the phone number and directions — no signup required.' },
+];
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
+    <div className="min-h-screen bg-background">
+      <Navbar />
+
+      {/* Hero */}
+      <section className="bg-primary text-primary-foreground">
+        <div className="container mx-auto px-4 py-16 md:py-24 text-center">
+          <h1 className="font-heading font-bold text-3xl md:text-5xl leading-tight mb-4 max-w-3xl mx-auto">
+            Find Your Medicine.<br />Right Now.
+          </h1>
+          <p className="text-primary-foreground/80 text-base md:text-lg mb-8 max-w-xl mx-auto">
+            Search 300+ pharmacies in Harare & Mutare — see who has it in stock.
+          </p>
+
+          <DrugSearchBar variant="hero" />
+
+          <div className="mt-4">
+            <CitySelector />
+          </div>
+        </div>
+      </section>
+
+      {/* Stats bar */}
+      <section className="border-b border-border bg-card">
+        <div className="container mx-auto px-4 py-5">
+          <div className="flex items-center justify-center gap-8 md:gap-16 flex-wrap">
+            {stats.map((stat) => (
+              <div key={stat.label} className="flex items-center gap-2 text-center">
+                <stat.icon className="w-5 h-5 text-primary" />
+                <div>
+                  <span className="font-heading font-bold text-lg text-foreground">{stat.value}</span>
+                  <span className="text-sm text-muted-foreground ml-1">{stat.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section className="container mx-auto px-4 py-16 md:py-20">
+        <h2 className="font-heading font-bold text-2xl md:text-3xl text-center text-foreground mb-12">
+          How It Works
+        </h2>
+        <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
+          {steps.map((step, i) => (
+            <div key={i} className="text-center">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                <step.icon className="w-6 h-6 text-primary" />
+              </div>
+              <h3 className="font-heading font-semibold text-lg text-foreground mb-2">{step.title}</h3>
+              <p className="text-sm text-muted-foreground">{step.description}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="bg-primary/5 border-t border-border">
+        <div className="container mx-auto px-4 py-12 md:py-16 text-center">
+          <h2 className="font-heading font-bold text-2xl text-foreground mb-3">Are you a pharmacy?</h2>
+          <p className="text-muted-foreground mb-6">List your pharmacy for free and reach patients searching for medicines near you.</p>
+          <Button size="lg" asChild>
+            <Link to="/pharmacy/register">Register Your Pharmacy</Link>
+          </Button>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-border bg-card py-8">
+        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
+              <Pill className="w-3 h-3 text-primary-foreground" />
+            </div>
+            <span className="font-heading font-semibold text-foreground">PharmTrack</span>
+          </div>
+          <p>© 2026 PharmTrack. Helping Zimbabwe find medicine faster.</p>
+        </div>
+      </footer>
     </div>
   );
 };
