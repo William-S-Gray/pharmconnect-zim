@@ -147,8 +147,8 @@ const AdminAuditLogPage = () => {
           <p className="text-muted-foreground text-sm">Complete audit trail of all system actions</p>
         </div>
         <ExportDropdown
-          onExportCSV={() => exportCSV(exportRows, 'audit-log')}
-          onExportExcel={() => exportExcel(exportRows, 'audit-log', 'Audit Log')}
+          onCSV={() => exportCSV(exportRows, 'audit-log')}
+          onExcel={() => exportExcel(exportRows, 'audit-log', 'Audit Log')}
         />
       </div>
 
