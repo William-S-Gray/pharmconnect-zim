@@ -403,7 +403,7 @@ const AdminUsersPage = () => {
             <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5" /> Edit User</DialogTitle>
             <DialogDescription>Update pharmacy account details</DialogDescription>
           </DialogHeader>
-          <UserFormFields isCreate={false} />
+          {renderFormFields(false)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
             <Button disabled={updateMutation.isPending || !formData.name || !formData.email} onClick={() => editUser && updateMutation.mutate({ id: editUser.id, data: formData })}>
