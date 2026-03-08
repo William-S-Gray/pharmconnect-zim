@@ -298,13 +298,28 @@
     border: 1px solid hsl(var(--border));
     transition: all 0.15s ease;
   }
+  .dark .btn-skeu-outline {
+    background: linear-gradient(180deg, hsl(222 40% 16%) 0%, hsl(222 40% 12%) 100%);
+    box-shadow:
+      0 1px 0 0 rgba(255,255,255,0.05) inset,
+      0 1px 4px rgba(0,0,0,0.3);
+  }
   .btn-skeu-outline:hover {
     background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 94%) 100%);
     box-shadow: var(--shadow-card);
     border-color: hsl(var(--primary) / 0.4);
   }
+  .dark .btn-skeu-outline:hover {
+    background: linear-gradient(180deg, hsl(222 40% 18%) 0%, hsl(222 40% 14%) 100%);
+  }
   .btn-skeu-outline:active {
     box-shadow: var(--shadow-inset);
     transform: translateY(1px);
+  }
+
+  /* ── Dark mode CTA section ── */
+  .dark .cta-section {
+    background: linear-gradient(180deg, hsl(222 40% 10%) 0%, hsl(222 40% 8%) 100%) !important;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.2) !important;
   }
 }
