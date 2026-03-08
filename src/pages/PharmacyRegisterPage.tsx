@@ -24,7 +24,7 @@ const PharmacyRegisterPage = () => {
     e.preventDefault();
     if (!form.agreedToTerms) { toast.error('You must agree to the terms'); return; }
     if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+    if (!isPasswordValid(form.password)) { toast.error('Password does not meet all requirements'); return; }
 
     try {
       setIsLoading(true);
