@@ -1,14 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Pill, Shield, Mail, ArrowLeft } from 'lucide-react';
+import { Pill, Shield, Mail, ArrowLeft, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import { MathCaptcha } from '@/components/MathCaptcha';
+import { checkLockout, recordFailedAttempt, resetLockout, formatLockoutTime } from '@/lib/accountLockout';
 
 const PharmacyLoginPage = () => {
   const navigate = useNavigate();
@@ -16,6 +17,26 @@ const PharmacyLoginPage = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Lockout state
+  const [isLockedOut, setIsLockedOut] = useState(false);
+  const [lockoutRemaining, setLockoutRemaining] = useState('');
+  const [failedAttempts, setFailedAttempts] = useState(0);
+
+  const checkCurrentLockout = useCallback(() => {
+    if (!email) { setIsLockedOut(false); return; }
+    const { locked, remainingMs } = checkLockout(email);
+    setIsLockedOut(locked);
+    if (locked) setLockoutRemaining(formatLockoutTime(remainingMs));
+  }, [email]);
+
+  // Re-check lockout when email changes or periodically
+  useEffect(() => {
+    checkCurrentLockout();
+    if (!isLockedOut) return;
+    const interval = setInterval(checkCurrentLockout, 1000);
+    return () => clearInterval(interval);
+  }, [checkCurrentLockout, isLockedOut]);
 
   // 2FA state
   const [requires2FA, setRequires2FA] = useState(false);
