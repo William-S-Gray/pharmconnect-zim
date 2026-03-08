@@ -5,6 +5,8 @@ import { refreshCsrfToken, clearCsrfToken } from '../lib/csrfToken';
 import { sessionTimeout } from '../lib/sessionTimeout';
 import { toast } from 'sonner';
 
+export type UserRole = 'pharmacy' | 'admin';
+
 export interface Pharmacy {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface Pharmacy {
   suburb: string;
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
+  role?: UserRole;
 }
 
 interface AuthContextType {
@@ -23,6 +26,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isApproved: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -141,7 +145,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error('Invalid credentials format');
     }
 
-    // Demo mode
+    // Demo admin mode
+    if (email === 'admin@pharmtrack.co.zw' && password === 'admin1234') {
+      const demoAdmin: Pharmacy = {
+        id: 'admin-001',
+        name: 'PharmTrack Admin',
+        email: 'admin@pharmtrack.co.zw',
+        phone: '',
+        city: 'Harare',
+        suburb: '',
+        status: 'APPROVED',
+        plan_tier: 'PRO',
+        role: 'admin',
+      };
+      const demoToken = 'demo-token-admin';
+      localStorage.setItem('pharmtrack_token', demoToken);
+      localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(demoAdmin));
+      setToken(demoToken);
+      setPharmacy(demoAdmin);
+      rateLimiter.reset('/api/auth/login');
+      refreshCsrfToken();
+      return;
+    }
+
+    // Demo pharmacy mode
     if (email === 'demo@pharmtrack.co.zw' && password === 'demo1234') {
       const demoPharmacy: Pharmacy = {
         id: 'demo-001',
@@ -152,6 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         suburb: 'Avondale',
         status: 'APPROVED',
         plan_tier: 'PRO',
+        role: 'pharmacy',
       };
       const demoToken = 'demo-token-pharmtrack';
       localStorage.setItem('pharmtrack_token', demoToken);
@@ -198,6 +226,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       pharmacy, token, isLoading,
       login, logout,
       isApproved: pharmacy?.status === 'APPROVED',
+      isAdmin: pharmacy?.role === 'admin',
     }}>
       {children}
     </AuthContext.Provider>
