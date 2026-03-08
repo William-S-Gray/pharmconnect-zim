@@ -2,6 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback, ReactNode 
 import api from '../lib/api';
 import { rateLimiter } from '../lib/rateLimiter';
 import { refreshCsrfToken, clearCsrfToken } from '../lib/csrfToken';
+import { sessionTimeout } from '../lib/sessionTimeout';
+import { toast } from 'sonner';
 
 export interface Pharmacy {
   id: string;
@@ -25,10 +27,9 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/**
- * Basic validation for stored pharmacy data shape.
- * Prevents tampered localStorage from crashing the app.
- */
+/** 30 minutes inactivity timeout */
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
+
 function isValidPharmacy(data: unknown): data is Pharmacy {
   if (!data || typeof data !== 'object') return false;
   const obj = data as Record<string, unknown>;
@@ -43,9 +44,6 @@ function isValidPharmacy(data: unknown): data is Pharmacy {
   );
 }
 
-/**
- * Sanitize a string to prevent XSS in stored data.
- */
 function sanitizeString(str: string): string {
   return str.replace(/[<>"'&]/g, '');
 }
@@ -67,6 +65,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setLoading] = useState(true);
 
+  // Logout handler (stable reference for session timeout)
+  const performLogout = useCallback((showMessage = false) => {
+    localStorage.removeItem('pharmtrack_token');
+    localStorage.removeItem('pharmtrack_pharmacy');
+    localStorage.removeItem('pharmtrack_last_activity');
+    setToken(null);
+    setPharmacy(null);
+    rateLimiter.clearAll();
+    clearCsrfToken();
+    sessionTimeout.stop();
+
+    if (showMessage) {
+      toast.info('You have been logged out due to inactivity.');
+      // Small delay to let toast show before redirect
+      setTimeout(() => {
+        window.location.href = '/pharmacy/login';
+      }, 1500);
+    }
+  }, []);
+
+  // Start session timeout when user is authenticated
+  const startSessionMonitoring = useCallback(() => {
+    sessionTimeout.start(
+      () => performLogout(true), // Auto-logout on timeout
+      {
+        timeoutMs: SESSION_TIMEOUT_MS,
+        onWarning: () => {
+          toast.warning('Your session will expire in 2 minutes due to inactivity.', {
+            duration: 10000,
+            action: {
+              label: 'Stay logged in',
+              onClick: () => sessionTimeout.recordActivity(),
+            },
+          });
+        },
+      }
+    );
+  }, [performLogout]);
+
   // Restore session with validation
   useEffect(() => {
     try {
@@ -78,26 +115,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           setToken(storedToken);
           setPharmacy(sanitizePharmacy(parsed));
         } else {
-          // Corrupted data — clear it
           localStorage.removeItem('pharmtrack_token');
           localStorage.removeItem('pharmtrack_pharmacy');
         }
       }
     } catch {
-      // JSON parse failed — clear corrupted data
       localStorage.removeItem('pharmtrack_token');
       localStorage.removeItem('pharmtrack_pharmacy');
     }
     setLoading(false);
   }, []);
 
+  // Monitor session timeout whenever auth state changes
+  useEffect(() => {
+    if (pharmacy && token) {
+      startSessionMonitoring();
+    } else {
+      sessionTimeout.stop();
+    }
+    return () => sessionTimeout.stop();
+  }, [pharmacy, token, startSessionMonitoring]);
+
   const login = useCallback(async (email: string, password: string) => {
-    // Validate input lengths to prevent abuse
     if (email.length > 254 || password.length > 128) {
       throw new Error('Invalid credentials format');
     }
 
-    // Demo mode — bypass backend
+    // Demo mode
     if (email === 'demo@pharmtrack.co.zw' && password === 'demo1234') {
       const demoPharmacy: Pharmacy = {
         id: 'demo-001',
@@ -114,8 +158,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(demoPharmacy));
       setToken(demoToken);
       setPharmacy(demoPharmacy);
-      // Reset login rate limit on success
       rateLimiter.reset('/api/auth/login');
+      refreshCsrfToken();
       return;
     }
 
@@ -127,23 +171,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const sanitized = sanitizePharmacy(newPharmacy);
-    localStorage.setItem('pharmtrack_token', newToken);
+
+    // If server uses httpOnly cookies, store marker instead of raw token
+    const authMode = response.headers['x-auth-mode'];
+    if (authMode === 'cookie') {
+      localStorage.setItem('pharmtrack_token', 'httponly');
+    } else {
+      localStorage.setItem('pharmtrack_token', newToken);
+    }
+
     localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(sanitized));
-    setToken(newToken);
+    setToken(authMode === 'cookie' ? 'httponly' : newToken);
     setPharmacy(sanitized);
-    // Reset login rate limit on success
     rateLimiter.reset('/api/auth/login');
     refreshCsrfToken();
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem('pharmtrack_token');
-    localStorage.removeItem('pharmtrack_pharmacy');
-    setToken(null);
-    setPharmacy(null);
-    rateLimiter.clearAll();
-    clearCsrfToken();
-  }, []);
+    // Tell server to clear httpOnly cookie
+    api.post('/api/auth/logout').catch(() => {});
+    performLogout(false);
+  }, [performLogout]);
 
   return (
     <AuthContext.Provider value={{
