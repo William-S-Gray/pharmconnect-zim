@@ -108,12 +108,7 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
   return (
     <div ref={wrapperRef} className="relative w-full max-w-2xl mx-auto">
       <div
-        className={`flex items-center gap-2 ${isHero ? 'rounded-xl p-1.5' : ''}`}
-        style={isHero ? {
-          background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 96%) 100%)',
-          boxShadow: '0 1px 0 0 rgba(255,255,255,0.9) inset, 0 -1px 0 0 rgba(0,0,0,0.05) inset, 0 4px 16px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.1)',
-          border: '1px solid hsl(214 20% 85%)',
-        } : {}}
+        className={`flex items-center gap-2 ${isHero ? 'rounded-xl p-1.5 hero-search-wrapper' : ''}`}
       >
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -123,8 +118,7 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setIsOpen(true)}
             placeholder="Search medicine name..."
-            className={`pl-10 border-0 focus-visible:ring-0 ${isHero ? 'h-12 text-base' : 'h-10'}`}
-            style={isHero ? { background: 'transparent', boxShadow: 'none' } : {}}
+            className={`pl-10 border-0 focus-visible:ring-0 text-foreground ${isHero ? 'h-12 text-base !bg-transparent !shadow-none' : ''}`}
           />
         </div>
         <Button onClick={handleSubmit} className={isHero ? 'h-10 px-6 rounded-lg' : 'h-9 px-4'}>
