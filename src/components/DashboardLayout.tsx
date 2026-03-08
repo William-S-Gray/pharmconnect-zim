@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
+  { label: 'Security', icon: Shield, path: '/dashboard/security' },
 ];
 
 export function DashboardLayout({ children }: { children?: React.ReactNode }) {

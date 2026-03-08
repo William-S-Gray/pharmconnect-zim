@@ -48,6 +48,7 @@ const App = () => (
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="alerts" element={<AlertSettingsPage />} />
               <Route path="profile" element={<PharmacyProfilePage />} />
+              <Route path="security" element={<SecurityAuditPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
