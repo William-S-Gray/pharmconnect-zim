@@ -67,17 +67,11 @@ const PharmacyRegisterPage = () => {
 
         <div className="card-pharma">
           <div className="flex items-center gap-3 mb-6">
-            <div
-              className="w-10 h-10 rounded-lg flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.25) inset, 0 4px 12px rgba(0,0,0,0.2)',
-              }}
-            >
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center brand-icon-skeu">
               <Pill className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-heading font-bold text-xl text-emboss">Register Your Pharmacy</h1>
+              <h1 className="font-heading font-bold text-xl text-foreground text-emboss">Register Your Pharmacy</h1>
               <p className="text-sm text-muted-foreground">Join PharmTrack — it's free to list</p>
             </div>
           </div>

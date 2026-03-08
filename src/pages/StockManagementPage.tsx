@@ -218,7 +218,7 @@ const StockManagementPage = () => {
           <div className="hidden md:block skeu-inset overflow-hidden p-0">
             <table className="w-full text-sm">
               <thead>
-                <tr style={{ background: 'linear-gradient(180deg, hsl(210 20% 95%) 0%, hsl(210 20% 91%) 100%)' }} className="border-b border-border">
+                <tr className="border-b border-border table-header-skeu">
                   <th className="text-left p-3 font-medium text-muted-foreground text-emboss">Drug Name</th>
                   <th className="text-right p-3 font-medium text-muted-foreground text-emboss">Qty</th>
                   <th className="text-right p-3 font-medium text-muted-foreground text-emboss">Price</th>
@@ -228,13 +228,13 @@ const StockManagementPage = () => {
               </thead>
               <tbody>
                 {filtered.map(item => (
-                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors" style={{ background: 'hsl(0 0% 99%)' }}>
+                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors table-row-skeu">
                     <td className="p-3">
                       <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
                       <p className="text-xs text-muted-foreground">{item.form}{item.expiry_date ? ` · Exp: ${item.expiry_date}` : ''}</p>
                     </td>
-                    <td className="p-3 text-right font-mono-drug">{item.quantity}</td>
-                    <td className="p-3 text-right font-mono-drug">${item.unit_price.toFixed(2)}</td>
+                    <td className="p-3 text-right font-mono-drug text-foreground">{item.quantity}</td>
+                    <td className="p-3 text-right font-mono-drug text-foreground">${item.unit_price.toFixed(2)}</td>
                     <td className="p-3 text-center"><StockStatusBadge status={item.stock_status} /></td>
                     <td className="p-3 text-right">
                       <div className="flex gap-1 justify-end">
@@ -321,11 +321,9 @@ const StockManagementPage = () => {
       />
 
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <AlertDialogContent style={{
-          background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 96%) 100%)',
-        }}>
+        <AlertDialogContent className="dialog-skeu">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-emboss">Remove Drug</AlertDialogTitle>
+            <AlertDialogTitle className="text-foreground text-emboss">Remove Drug</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to remove this drug from your inventory? This action cannot be undone.
             </AlertDialogDescription>

@@ -28,13 +28,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
       <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
         <div className="p-4 border-b border-border">
           <Link to="/" className="flex items-center gap-2">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.25) inset, 0 2px 6px rgba(0,0,0,0.15)',
-              }}
-            >
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center brand-icon-skeu">
               <Pill className="w-4 h-4 text-white" />
             </div>
             <span className="font-heading font-bold text-foreground text-emboss">PharmTrack</span>

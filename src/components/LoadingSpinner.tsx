@@ -16,17 +16,10 @@ const sizeMap = {
 export function LoadingSpinner({ size = 'md', label, className }: LoadingSpinnerProps) {
   return (
     <div className={cn('flex flex-col items-center justify-center gap-3', className)}>
-      <div
-        className="rounded-full p-2"
-        style={{
-          background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 95%) 100%)',
-          boxShadow: '0 1px 0 0 rgba(255,255,255,0.8) inset, 0 2px 8px rgba(0,0,0,0.08)',
-          border: '1px solid hsl(214 20% 85%)',
-        }}
-      >
+      <div className="rounded-full p-2 spinner-skeu">
         <Loader2 className={cn(sizeMap[size], 'animate-spin text-primary')} />
       </div>
-      {label && <p className="text-sm text-muted-foreground text-emboss">{label}</p>}
+      {label && <p className="text-sm text-muted-foreground">{label}</p>}
     </div>
   );
 }

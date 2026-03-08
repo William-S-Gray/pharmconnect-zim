@@ -45,14 +45,7 @@ export function PharmacyResultCard({
 
       <div className="flex items-center gap-4 mt-3 text-sm">
         {unitPrice !== null && (
-          <span
-            className="font-mono-drug font-medium px-2 py-0.5 rounded-md"
-            style={{
-              background: 'linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 20% 92%) 100%)',
-              boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06), 0 1px 0 rgba(255,255,255,0.7)',
-              border: '1px solid hsl(214 20% 85%)',
-            }}
-          >
+          <span className="font-mono-drug price-tag-skeu">
             ${unitPrice.toFixed(2)}
           </span>
         )}

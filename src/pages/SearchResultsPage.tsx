@@ -144,18 +144,11 @@ const SearchResultsPage = () => {
 function MapPlaceholder() {
   return (
     <div className="flex flex-col items-center gap-2">
-      <div
-        className="w-12 h-12 rounded-xl flex items-center justify-center"
-        style={{
-          background: 'linear-gradient(180deg, hsl(174 40% 94%) 0%, hsl(174 30% 88%) 100%)',
-          boxShadow: 'inset 0 -2px 4px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.08)',
-          border: '1px solid hsl(174 20% 82%)',
-        }}
-      >
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center map-icon-skeu">
         <span className="text-2xl">🗺️</span>
       </div>
-      <p className="text-sm font-medium text-emboss">Map View</p>
-      <p className="text-xs">Connect Google Maps API to enable the interactive map</p>
+      <p className="text-sm font-medium text-foreground">Map View</p>
+      <p className="text-xs text-muted-foreground">Connect Google Maps API to enable the interactive map</p>
     </div>
   );
 }
