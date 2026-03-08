@@ -39,7 +39,7 @@ const StockManagementPage = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="font-heading font-bold text-2xl text-foreground">Stock Management</h1>
+        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Stock Management</h1>
         <Button><Plus className="w-4 h-4 mr-2" /> Add Drug</Button>
       </div>
 
@@ -63,21 +63,26 @@ const StockManagementPage = () => {
         </div>
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block card-pharma overflow-hidden p-0">
+      {/* Desktop table — recessed surface */}
+      <div className="hidden md:block skeu-inset overflow-hidden p-0">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="text-left p-3 font-medium text-muted-foreground">Drug Name</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Qty</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Price</th>
-              <th className="text-center p-3 font-medium text-muted-foreground">Status</th>
-              <th className="text-right p-3 font-medium text-muted-foreground">Action</th>
+            <tr
+              className="border-b border-border"
+              style={{
+                background: 'linear-gradient(180deg, hsl(210 20% 95%) 0%, hsl(210 20% 91%) 100%)',
+              }}
+            >
+              <th className="text-left p-3 font-medium text-muted-foreground text-emboss">Drug Name</th>
+              <th className="text-right p-3 font-medium text-muted-foreground text-emboss">Qty</th>
+              <th className="text-right p-3 font-medium text-muted-foreground text-emboss">Price</th>
+              <th className="text-center p-3 font-medium text-muted-foreground text-emboss">Status</th>
+              <th className="text-right p-3 font-medium text-muted-foreground text-emboss">Action</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(item => (
-              <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+              <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors" style={{ background: 'hsl(0 0% 99%)' }}>
                 <td className="p-3">
                   <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
                   <p className="text-xs text-muted-foreground">{item.form}</p>
@@ -86,7 +91,7 @@ const StockManagementPage = () => {
                 <td className="p-3 text-right font-mono-drug">${item.unitPrice.toFixed(2)}</td>
                 <td className="p-3 text-center"><StockStatusBadge status={item.status} /></td>
                 <td className="p-3 text-right">
-                  <Button size="sm" variant="ghost" className="text-xs">Edit</Button>
+                  <Button size="sm" variant="outline" className="text-xs">Edit</Button>
                 </td>
               </tr>
             ))}

@@ -25,7 +25,6 @@ const PharmacyRegisterPage = () => {
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
 
     setIsLoading(true);
-    // Simulate registration
     await new Promise(r => setTimeout(r, 1500));
     setIsLoading(false);
     toast.success('Registration received! Our team will verify your pharmacy within 24 hours.');
@@ -42,17 +41,23 @@ const PharmacyRegisterPage = () => {
 
         <div className="card-pharma">
           <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-              <Pill className="w-5 h-5 text-primary-foreground" />
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
+                boxShadow: '0 1px 0 0 rgba(255,255,255,0.25) inset, 0 4px 12px rgba(0,0,0,0.2)',
+              }}
+            >
+              <Pill className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h1 className="font-heading font-bold text-xl">Register Your Pharmacy</h1>
+              <h1 className="font-heading font-bold text-xl text-emboss">Register Your Pharmacy</h1>
               <p className="text-sm text-muted-foreground">Join PharmTrack — it's free to list</p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide">Pharmacy Information</h3>
+            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide text-emboss">Pharmacy Information</h3>
 
             <div><Label htmlFor="name">Pharmacy Name *</Label><Input id="name" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className="h-11" /></div>
             <div><Label htmlFor="address">Physical Address *</Label><Input id="address" value={form.address} onChange={e => setForm({...form, address: e.target.value})} required className="h-11" /></div>
@@ -75,10 +80,10 @@ const PharmacyRegisterPage = () => {
             <div><Label htmlFor="phone">Phone Number *</Label><Input id="phone" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} placeholder="07X XXX XXXX" required className="h-11" /></div>
             <div><Label htmlFor="email">Email Address *</Label><Input id="email" type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required className="h-11" /></div>
 
-            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2">Verification</h3>
+            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2 text-emboss">Verification</h3>
             <div><Label htmlFor="mcaz">MCAZ Licence Number</Label><Input id="mcaz" value={form.mcazLicense} onChange={e => setForm({...form, mcazLicense: e.target.value})} placeholder="Optional but recommended" className="h-11" /></div>
 
-            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2">Account</h3>
+            <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2 text-emboss">Account</h3>
             <div><Label htmlFor="password">Password *</Label><Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" /></div>
             <div><Label htmlFor="confirmPassword">Confirm Password *</Label><Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} required className="h-11" /></div>
 
