@@ -133,6 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPharmacy(sanitized);
     // Reset login rate limit on success
     rateLimiter.reset('/api/auth/login');
+    refreshCsrfToken();
   }, []);
 
   const logout = useCallback(() => {
