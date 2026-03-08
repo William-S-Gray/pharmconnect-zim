@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Check, X } from 'lucide-react';
+import { Check, X, Star } from 'lucide-react';
 
 const plans = [
   {
@@ -29,34 +29,65 @@ const plans = [
 const SubscriptionPage = () => {
   return (
     <div className="space-y-6 animate-fade-in">
-      <h1 className="font-heading font-bold text-2xl text-foreground">Subscription</h1>
+      <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Subscription</h1>
       <p className="text-muted-foreground">Choose the plan that best fits your pharmacy</p>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid md:grid-cols-3 gap-5">
         {plans.map((plan) => (
           <div
             key={plan.name}
-            className={`card-pharma relative ${plan.popular ? 'border-primary ring-1 ring-primary' : ''}`}
+            className="card-pharma relative overflow-hidden"
+            style={plan.popular ? {
+              background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(174 30% 95%) 100%)',
+              borderColor: 'hsl(174 80% 35%)',
+              boxShadow: '0 1px 0 0 rgba(255,255,255,0.9) inset, 0 -1px 0 0 rgba(0,0,0,0.04) inset, 0 4px 20px hsl(174 80% 35% / 0.15), 0 2px 8px rgba(0,0,0,0.06)',
+            } : {}}
           >
             {plan.popular && (
-              <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] font-bold px-3 py-0.5 rounded-full">
-                POPULAR
+              <span
+                className="absolute -top-0 left-1/2 -translate-x-1/2 text-[10px] font-bold px-4 py-1 rounded-b-lg flex items-center gap-1"
+                style={{
+                  background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 20%) 100%)',
+                  color: 'white',
+                  boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                  textShadow: '0 1px 1px rgba(0,0,0,0.2)',
+                }}
+              >
+                <Star className="w-3 h-3" /> POPULAR
               </span>
             )}
-            <h3 className="font-heading font-bold text-lg text-foreground">{plan.name}</h3>
+            <h3 className="font-heading font-bold text-lg text-foreground mt-3 text-emboss">{plan.name}</h3>
             <div className="mt-2 mb-4">
-              <span className="font-heading font-bold text-3xl text-foreground">${plan.price}</span>
+              <span className="font-heading font-bold text-3xl text-foreground text-emboss">${plan.price}</span>
               <span className="text-muted-foreground text-sm">/month</span>
             </div>
             <ul className="space-y-2 mb-6 text-sm">
               {plan.features.map(f => (
                 <li key={f} className="flex items-center gap-2 text-foreground">
-                  <Check className="w-4 h-4 text-accent flex-shrink-0" /> {f}
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: 'linear-gradient(180deg, hsl(160 80% 45%) 0%, hsl(160 100% 35%) 100%)',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    <Check className="w-2.5 h-2.5 text-white" />
+                  </span>
+                  {f}
                 </li>
               ))}
               {plan.missing.map(f => (
                 <li key={f} className="flex items-center gap-2 text-muted-foreground">
-                  <X className="w-4 h-4 flex-shrink-0" /> {f}
+                  <span
+                    className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
+                    style={{
+                      background: 'linear-gradient(180deg, hsl(210 20% 90%) 0%, hsl(210 20% 85%) 100%)',
+                      boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)',
+                    }}
+                  >
+                    <X className="w-2.5 h-2.5 text-muted-foreground" />
+                  </span>
+                  {f}
                 </li>
               ))}
             </ul>

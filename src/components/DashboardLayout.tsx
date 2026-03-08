@@ -15,20 +15,32 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar — hidden on mobile, shown on md+ */}
-      <aside className="hidden md:flex w-60 flex-col border-r border-border bg-card fixed inset-y-0 left-0 z-40">
+      {/* Sidebar — skeuomorphic raised panel */}
+      <aside
+        className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40"
+        style={{
+          background: 'linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 20% 92%) 100%)',
+          boxShadow: '1px 0 0 0 rgba(255,255,255,0.5) inset, 2px 0 12px rgba(0,0,0,0.06)',
+        }}
+      >
         <div className="p-4 border-b border-border">
           <Link to="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Pill className="w-4 h-4 text-primary-foreground" />
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{
+                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
+                boxShadow: '0 1px 0 0 rgba(255,255,255,0.25) inset, 0 2px 6px rgba(0,0,0,0.15)',
+              }}
+            >
+              <Pill className="w-4 h-4 text-white" />
             </div>
-            <span className="font-heading font-bold text-foreground">PharmTrack</span>
+            <span className="font-heading font-bold text-foreground text-emboss">PharmTrack</span>
           </Link>
         </div>
 
         <div className="px-3 py-4">
           <div className="card-pharma mb-4 p-3">
-            <p className="font-heading font-semibold text-sm truncate">Halsteads Pharmacy</p>
+            <p className="font-heading font-semibold text-sm truncate text-emboss">Halsteads Pharmacy</p>
             <span className="badge-approved text-[10px] mt-1">Approved</span>
           </div>
         </div>
@@ -41,10 +53,10 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
                 key={item.path}
                 to={item.path}
                 className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors',
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150',
                   isActive
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    ? 'font-medium text-primary-foreground btn-skeu-primary'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss'
                 )}
               >
                 <item.icon className="w-4 h-4" />
@@ -55,14 +67,20 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
         </nav>
 
         <div className="p-3 border-t border-border">
-          <Link to="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted hover:text-foreground">
+          <Link to="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss transition-colors">
             <LogOut className="w-4 h-4" /> Logout
           </Link>
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-40 flex justify-around py-2 px-1">
+      {/* Mobile bottom nav — raised skeuomorphic bar */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border"
+        style={{
+          background: 'linear-gradient(180deg, hsl(0 0% 99%) 0%, hsl(210 20% 94%) 100%)',
+          boxShadow: '0 -1px 0 0 rgba(255,255,255,0.8) inset, 0 -4px 12px rgba(0,0,0,0.06)',
+        }}
+      >
         {navItems.slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -70,7 +88,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
               key={item.path}
               to={item.path}
               className={cn(
-                'flex flex-col items-center gap-0.5 text-[10px] p-1.5 rounded-lg transition-colors',
+                'flex flex-col items-center gap-0.5 text-[10px] p-1.5 rounded-lg transition-all',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >

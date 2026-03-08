@@ -87,7 +87,14 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
 
   return (
     <div ref={wrapperRef} className="relative w-full max-w-2xl mx-auto">
-      <div className={`flex items-center gap-2 ${isHero ? 'bg-card rounded-xl p-1.5 shadow-lg' : ''}`}>
+      <div
+        className={`flex items-center gap-2 ${isHero ? 'rounded-xl p-1.5' : ''}`}
+        style={isHero ? {
+          background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 96%) 100%)',
+          boxShadow: '0 1px 0 0 rgba(255,255,255,0.9) inset, 0 -1px 0 0 rgba(0,0,0,0.05) inset, 0 4px 16px rgba(0,0,0,0.15), 0 8px 32px rgba(0,0,0,0.1)',
+          border: '1px solid hsl(214 20% 85%)',
+        } : {}}
+      >
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
@@ -96,7 +103,8 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setIsOpen(true)}
             placeholder="Search medicine name..."
-            className={`pl-10 border-0 bg-transparent focus-visible:ring-0 ${isHero ? 'h-12 text-base' : 'h-10'}`}
+            className={`pl-10 border-0 focus-visible:ring-0 ${isHero ? 'h-12 text-base' : 'h-10'}`}
+            style={isHero ? { background: 'transparent', boxShadow: 'none' } : {}}
           />
         </div>
         <Button onClick={handleSubmit} className={isHero ? 'h-10 px-6 rounded-lg' : 'h-9 px-4'}>
@@ -105,20 +113,36 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
       </div>
 
       {isOpen && results.length > 0 && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-lg z-50 overflow-hidden animate-fade-in">
+        <div
+          className="absolute top-full left-0 right-0 mt-2 rounded-xl overflow-hidden z-50 animate-fade-in border border-border"
+          style={{
+            background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 97%) 100%)',
+            boxShadow: '0 8px 30px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.08), 0 1px 0 0 rgba(255,255,255,0.8) inset',
+          }}
+        >
           {results.map((drug, index) => (
             <button
               key={drug.id}
               onClick={() => handleSelect(drug)}
-              className={`w-full text-left px-4 py-3 flex items-center justify-between hover:bg-muted transition-colors ${
-                index === selectedIndex ? 'bg-muted' : ''
+              className={`w-full text-left px-4 py-3 flex items-center justify-between transition-colors ${
+                index === selectedIndex ? 'bg-primary/10' : 'hover:bg-muted/60'
               } ${index !== results.length - 1 ? 'border-b border-border' : ''}`}
             >
               <div>
                 <p className="font-medium text-sm text-foreground">{drug.common_name} <span className="font-mono-drug text-xs text-muted-foreground">{drug.strength}</span></p>
                 <p className="text-xs text-muted-foreground">{drug.generic_name} · {drug.form} · {drug.category}</p>
               </div>
-              <span className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{drug.form}</span>
+              <span
+                className="text-xs px-2.5 py-1 rounded-full font-medium"
+                style={{
+                  background: 'linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 20% 92%) 100%)',
+                  boxShadow: '0 1px 0 rgba(255,255,255,0.7) inset, 0 1px 2px rgba(0,0,0,0.06)',
+                  border: '1px solid hsl(214 20% 85%)',
+                  color: 'hsl(215 17% 47%)',
+                }}
+              >
+                {drug.form}
+              </span>
             </button>
           ))}
         </div>

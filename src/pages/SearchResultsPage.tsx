@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { DrugSearchBar } from '@/components/DrugSearchBar';
 import { PharmacyResultCard } from '@/components/PharmacyResultCard';
@@ -31,8 +31,8 @@ const SearchResultsPage = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Search bar */}
-      <div className="border-b border-border bg-card py-3 px-4">
+      {/* Search bar — raised toolbar */}
+      <div className="skeu-toolbar border-b py-3 px-4">
         <div className="container mx-auto">
           <DrugSearchBar variant="compact" initialQuery={drugQuery} onSearch={handleSearch} />
         </div>
@@ -44,13 +44,13 @@ const SearchResultsPage = () => {
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <h1 className="font-heading font-semibold text-lg text-foreground">
+                <h1 className="font-heading font-semibold text-lg text-foreground text-emboss">
                   {drugQuery ? `"${drugQuery}"` : 'Search results'} near {cityParam}
                 </h1>
                 <p className="text-sm text-muted-foreground">{sorted.length} pharmacy{sorted.length !== 1 ? 'ies' : ''} found</p>
               </div>
               <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                <SelectTrigger className="w-36 h-9">
+                <SelectTrigger className="w-36 h-9 btn-skeu-outline">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -87,9 +87,11 @@ const SearchResultsPage = () => {
             )}
           </div>
 
-          {/* Map placeholder */}
+          {/* Map placeholder — recessed */}
           <div className="hidden lg:block w-96 flex-shrink-0">
-            <div className="sticky top-20 h-[calc(100vh-6rem)] rounded-lg bg-muted border border-border flex items-center justify-center">
+            <div
+              className="sticky top-20 h-[calc(100vh-6rem)] rounded-xl flex items-center justify-center skeu-inset"
+            >
               <div className="text-center text-muted-foreground p-4">
                 <MapPlaceholder />
               </div>
@@ -104,10 +106,17 @@ const SearchResultsPage = () => {
 function MapPlaceholder() {
   return (
     <div className="flex flex-col items-center gap-2">
-      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+      <div
+        className="w-12 h-12 rounded-xl flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(180deg, hsl(174 40% 94%) 0%, hsl(174 30% 88%) 100%)',
+          boxShadow: 'inset 0 -2px 4px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.08)',
+          border: '1px solid hsl(174 20% 82%)',
+        }}
+      >
         <span className="text-2xl">🗺️</span>
       </div>
-      <p className="text-sm font-medium">Map View</p>
+      <p className="text-sm font-medium text-emboss">Map View</p>
       <p className="text-xs">Connect Google Maps API to enable the interactive map</p>
     </div>
   );

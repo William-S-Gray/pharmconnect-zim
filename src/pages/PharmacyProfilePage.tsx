@@ -50,7 +50,7 @@ const PharmacyProfilePage = () => {
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
       <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground">Pharmacy Profile</h1>
+        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Profile</h1>
         <p className="text-muted-foreground text-sm">Manage your pharmacy details and operating hours</p>
       </div>
 
@@ -155,12 +155,16 @@ const PharmacyProfilePage = () => {
         </CardHeader>
         {!form.isOpen24h && (
           <CardContent>
-            <div className="space-y-2">
+            <div className="skeu-inset p-1">
               {days.map((day) => {
                 const h = hours[day];
                 return (
-                  <div key={day} className="grid grid-cols-[100px_1fr] sm:grid-cols-[120px_100px_100px_80px] gap-3 items-center py-2 border-b border-border last:border-0">
-                    <span className="text-sm font-medium capitalize text-foreground">{day}</span>
+                  <div
+                    key={day}
+                    className="grid grid-cols-[100px_1fr] sm:grid-cols-[120px_100px_100px_80px] gap-3 items-center py-2.5 px-3 border-b border-border last:border-0"
+                    style={{ background: 'hsl(0 0% 99%)' }}
+                  >
+                    <span className="text-sm font-medium capitalize text-foreground text-emboss">{day}</span>
                     {h.closed ? (
                       <span className="text-sm text-muted-foreground col-span-1 sm:col-span-2">Closed</span>
                     ) : (
@@ -203,13 +207,19 @@ const PharmacyProfilePage = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Status:</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-accent/10 text-accent">
-                Approved
-              </span>
+              <span className="badge-approved">Approved</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Plan:</span>
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+              <span
+                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+                style={{
+                  background: 'linear-gradient(180deg, hsl(174 60% 40%) 0%, hsl(174 100% 28%) 100%)',
+                  color: 'white',
+                  boxShadow: '0 1px 0 rgba(255,255,255,0.3) inset, 0 1px 3px rgba(0,0,0,0.1)',
+                  textShadow: '0 1px 1px rgba(0,0,0,0.2)',
+                }}
+              >
                 BASIC
               </span>
             </div>

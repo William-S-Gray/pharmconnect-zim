@@ -46,7 +46,7 @@ const AlertSettingsPage = () => {
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
       <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground">Alert Settings</h1>
+        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Alert Settings</h1>
         <p className="text-muted-foreground text-sm">Configure SMS notifications for low stock items</p>
       </div>
 
@@ -134,25 +134,31 @@ const AlertSettingsPage = () => {
         </CardContent>
       </Card>
 
-      {/* Per-Drug Thresholds */}
+      {/* Per-Drug Thresholds — recessed table */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Per-Drug Thresholds</CardTitle>
           <CardDescription>Override the default threshold for specific drugs</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-1">
+          <div className="skeu-inset p-1 space-y-0">
             {/* Header */}
-            <div className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              <span>Drug</span>
-              <span>Threshold</span>
-              <span>Alerts</span>
+            <div
+              className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md"
+              style={{
+                background: 'linear-gradient(180deg, hsl(210 20% 94%) 0%, hsl(210 20% 90%) 100%)',
+              }}
+            >
+              <span className="text-emboss">Drug</span>
+              <span className="text-emboss">Threshold</span>
+              <span className="text-emboss">Alerts</span>
             </div>
 
             {drugThresholds.map((item) => (
               <div
                 key={item.id}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+                className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30"
+                style={{ background: 'hsl(0 0% 99%)' }}
               >
                 <span className="font-mono text-sm font-medium text-foreground">{item.drug}</span>
 
