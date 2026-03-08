@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import LoginAlertSettings from '@/components/security/LoginAlertSettings';
 
 // ── Types ─────────────────────────────────────────────────────────
 interface Session {
