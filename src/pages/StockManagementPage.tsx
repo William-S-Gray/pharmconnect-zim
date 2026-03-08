@@ -76,6 +76,8 @@ const StockManagementPage = () => {
     return matchesSearch && matchesFilter;
   });
 
+  const pagination = usePagination(filtered, { defaultPageSize: 20 });
+
   const addMutation = useMutation({
     mutationFn: (payload: any) => api.post('/api/stock', payload),
     onSuccess: () => {
