@@ -118,8 +118,7 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
             onKeyDown={handleKeyDown}
             onFocus={() => results.length > 0 && setIsOpen(true)}
             placeholder="Search medicine name..."
-            className={`pl-10 border-0 focus-visible:ring-0 ${isHero ? 'h-12 text-base' : 'h-10'}`}
-            style={isHero ? { background: 'transparent', boxShadow: 'none' } : {}}
+            className={`pl-10 border-0 focus-visible:ring-0 text-foreground ${isHero ? 'h-12 text-base !bg-transparent !shadow-none' : ''}`}
           />
         </div>
         <Button onClick={handleSubmit} className={isHero ? 'h-10 px-6 rounded-lg' : 'h-9 px-4'}>
