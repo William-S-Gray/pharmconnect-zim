@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
+  { label: 'Security', icon: Shield, path: '/dashboard/security' },
 ];
 
 export function DashboardLayout({ children }: { children?: React.ReactNode }) {
