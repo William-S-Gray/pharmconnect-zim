@@ -148,6 +148,60 @@ const PharmacyLoginPage = () => {
                 ← Back to login
               </Button>
             </form>
+          ) : showForgot ? (
+            forgotSent ? (
+              <div className="space-y-4 text-center">
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-foreground">
+                    We've sent a password reset link to <strong className="text-foreground">{forgotEmail}</strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Didn't receive it? Check your spam folder or try again.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full h-11"
+                  onClick={() => { setForgotSent(false); setForgotEmail(''); }}
+                >
+                  Try another email
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-sm gap-1"
+                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); }}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back to login
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <Label htmlFor="forgotEmail">Email Address</Label>
+                  <Input
+                    id="forgotEmail"
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                    className="h-11"
+                    placeholder="pharmacy@example.com"
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" className="w-full h-11" disabled={forgotLoading}>
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-sm gap-1"
+                  onClick={() => { setShowForgot(false); setForgotEmail(''); }}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back to login
+                </Button>
+              </form>
+            )
           ) : (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -160,7 +214,7 @@ const PharmacyLoginPage = () => {
                   <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required className="h-11" />
                 </div>
                 <div className="text-right">
-                  <button type="button" className="text-sm text-primary hover:underline">Forgot password?</button>
+                  <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShowForgot(true)}>Forgot password?</button>
                 </div>
                 <Button type="submit" className="w-full h-11" disabled={isLoading}>
                   {isLoading ? 'Signing in...' : 'Sign In'}

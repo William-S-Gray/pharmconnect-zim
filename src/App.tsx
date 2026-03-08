@@ -39,6 +39,7 @@ const App = () => (
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
             <Route path="/pharmacy/login" element={<PharmacyLoginPage />} />
+            <Route path="/pharmacy/reset-password" element={<ResetPasswordPage />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <DashboardLayout />
