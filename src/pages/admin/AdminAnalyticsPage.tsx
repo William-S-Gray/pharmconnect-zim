@@ -1,11 +1,17 @@
+import { useState } from 'react';
+import { format } from 'date-fns';
+import { CalendarIcon } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { Skeleton } from '@/components/ui/skeleton';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
+import { cn } from '@/lib/utils';
 
 interface AnalyticsData {
   summary: { label: string; value: string }[];
@@ -22,10 +28,16 @@ const fallbackData: AnalyticsData = {
 };
 
 const AdminAnalyticsPage = () => {
+  const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+
   const { data, isLoading } = useQuery<AnalyticsData>({
-    queryKey: ['admin', 'analytics'],
+    queryKey: ['admin', 'analytics', dateFrom?.toISOString(), dateTo?.toISOString()],
     queryFn: async () => {
-      const res = await api.get('/api/admin/analytics');
+      const params: Record<string, string> = {};
+      if (dateFrom) params.from = format(dateFrom, 'yyyy-MM-dd');
+      if (dateTo) params.to = format(dateTo, 'yyyy-MM-dd');
+      const res = await api.get('/api/admin/analytics', { params });
       return res.data;
     },
     retry: 1,
@@ -35,6 +47,26 @@ const AdminAnalyticsPage = () => {
   const d = data || fallbackData;
   const maxCity = Math.max(...d.city_breakdown.map(c => c.count), 1);
 
+  const dateLabel = dateFrom && dateTo
+    ? `${format(dateFrom, 'MMM d, yyyy')} – ${format(dateTo, 'MMM d, yyyy')}`
+    : dateFrom
+      ? `From ${format(dateFrom, 'MMM d, yyyy')}`
+      : dateTo
+        ? `Until ${format(dateTo, 'MMM d, yyyy')}`
+        : '';
+
+  const buildRows = () => [
+    ...d.summary.map(s => ({ Section: 'Summary', Label: s.label, Value: s.value })),
+    ...d.daily_searches.map(s => ({ Section: 'Daily Searches', Label: s.day, Value: s.searches })),
+    ...d.top_drugs.map(s => ({ Section: 'Top Drugs', Label: s.name, Value: s.searches })),
+    ...d.registration_trend.map(s => ({ Section: 'Registrations', Label: s.month, Value: s.pharmacies })),
+    ...d.city_breakdown.map(s => ({ Section: 'Cities', Label: s.city, Value: s.count })),
+  ];
+
+  const filenameSuffix = dateFrom || dateTo
+    ? `_${dateFrom ? format(dateFrom, 'yyyyMMdd') : 'start'}-${dateTo ? format(dateTo, 'yyyyMMdd') : 'end'}`
+    : '';
+
   if (isLoading) {
     return (
       <div className="py-16"><LoadingSpinner size="lg" label="Loading analytics..." /></div>
@@ -43,35 +75,69 @@ const AdminAnalyticsPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">System Analytics</h1>
           <p className="text-muted-foreground text-sm">Network-wide statistics and trends</p>
         </div>
-        <ExportDropdown
-          disabled={!d.summary.length && !d.daily_searches.length}
-          onCSV={() => {
-            const rows = [
-              ...d.summary.map(s => ({ Section: 'Summary', Label: s.label, Value: s.value })),
-              ...d.daily_searches.map(s => ({ Section: 'Daily Searches', Label: s.day, Value: s.searches })),
-              ...d.top_drugs.map(s => ({ Section: 'Top Drugs', Label: s.name, Value: s.searches })),
-              ...d.registration_trend.map(s => ({ Section: 'Registrations', Label: s.month, Value: s.pharmacies })),
-              ...d.city_breakdown.map(s => ({ Section: 'Cities', Label: s.city, Value: s.count })),
-            ];
-            exportCSV(rows, 'analytics-report');
-          }}
-          onExcel={() => {
-            const rows = [
-              ...d.summary.map(s => ({ Section: 'Summary', Label: s.label, Value: s.value })),
-              ...d.daily_searches.map(s => ({ Section: 'Daily Searches', Label: s.day, Value: s.searches })),
-              ...d.top_drugs.map(s => ({ Section: 'Top Drugs', Label: s.name, Value: s.searches })),
-              ...d.registration_trend.map(s => ({ Section: 'Registrations', Label: s.month, Value: s.pharmacies })),
-              ...d.city_breakdown.map(s => ({ Section: 'Cities', Label: s.city, Value: s.count })),
-            ];
-            exportExcel(rows, 'analytics-report', 'Analytics');
-          }}
-        />
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date From */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal min-w-[140px]", !dateFrom && "text-muted-foreground")}>
+                <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+                {dateFrom ? format(dateFrom, 'MMM d, yyyy') : 'From'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dateFrom}
+                onSelect={setDateFrom}
+                disabled={(date) => (dateTo ? date > dateTo : false) || date > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {/* Date To */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className={cn("justify-start text-left font-normal min-w-[140px]", !dateTo && "text-muted-foreground")}>
+                <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+                {dateTo ? format(dateTo, 'MMM d, yyyy') : 'To'}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                mode="single"
+                selected={dateTo}
+                onSelect={setDateTo}
+                disabled={(date) => (dateFrom ? date < dateFrom : false) || date > new Date()}
+                initialFocus
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" onClick={() => { setDateFrom(undefined); setDateTo(undefined); }}>
+              Clear
+            </Button>
+          )}
+
+          <ExportDropdown
+            disabled={!d.summary.length && !d.daily_searches.length}
+            onCSV={() => exportCSV(buildRows(), `analytics-report${filenameSuffix}`)}
+            onExcel={() => exportExcel(buildRows(), `analytics-report${filenameSuffix}`, 'Analytics')}
+          />
+        </div>
       </div>
+
+      {dateLabel && (
+        <p className="text-xs text-muted-foreground">Showing data for: <span className="font-medium text-foreground">{dateLabel}</span></p>
+      )}
 
       {d.summary.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
