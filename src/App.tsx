@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { FullPageSpinner } from "./components/LoadingSpinner";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { DashboardLayout } from "./components/DashboardLayout";
@@ -36,7 +37,11 @@ const App = () => (
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
             <Route path="/pharmacy/login" element={<PharmacyLoginPage />} />
-            <Route path="/dashboard" element={<DashboardLayout />}>
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }>
               <Route index element={<PharmacyDashboard />} />
               <Route path="stock" element={<StockManagementPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
