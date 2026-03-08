@@ -16,6 +16,12 @@ api.interceptors.request.use((config) => {
   const token = localStorage.getItem('pharmtrack_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
 
+  // Attach CSRF token to mutation requests
+  const method = config.method || 'get';
+  if (isMutationMethod(method)) {
+    config.headers[CSRF_HEADER] = getCsrfToken();
+  }
+
   // Rate limiting check
   const endpoint = config.url || '';
   const result = rateLimiter.check(endpoint);
