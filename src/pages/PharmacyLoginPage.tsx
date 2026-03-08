@@ -174,7 +174,7 @@ const PharmacyLoginPage = () => {
                 <Button
                   variant="ghost"
                   className="w-full text-sm gap-1"
-                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); }}
+                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); setCaptchaVerified(false); }}
                 >
                   <ArrowLeft className="w-4 h-4" /> Back to login
                 </Button>
