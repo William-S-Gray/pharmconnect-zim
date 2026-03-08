@@ -19,6 +19,7 @@ const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const AlertSettingsPage = lazy(() => import("./pages/AlertSettingsPage"));
 const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 const SecurityAuditPage = lazy(() => import("./pages/SecurityAuditPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
             <Route path="/pharmacy/login" element={<PharmacyLoginPage />} />
+            <Route path="/pharmacy/reset-password" element={<ResetPasswordPage />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
                 <DashboardLayout />

@@ -4,7 +4,7 @@ import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Pill, Shield } from 'lucide-react';
+import { Pill, Shield, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
@@ -20,6 +20,29 @@ const PharmacyLoginPage = () => {
   const [requires2FA, setRequires2FA] = useState(false);
   const [totpCode, setTotpCode] = useState('');
   const [tempToken, setTempToken] = useState('');
+
+  // Forgot password state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) return;
+    try {
+      setForgotLoading(true);
+      await api.post('/api/auth/forgot-password', { email: forgotEmail });
+      setForgotSent(true);
+      toast.success('If that email is registered, a reset link has been sent.');
+    } catch {
+      // Always show success to prevent email enumeration
+      setForgotSent(true);
+      toast.success('If that email is registered, a reset link has been sent.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -73,20 +96,24 @@ const PharmacyLoginPage = () => {
         <div className="card-pharma w-full max-w-[420px]">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 brand-icon-skeu">
-              {requires2FA ? (
-                <Shield className="w-6 h-6 text-white" />
-              ) : (
-                <Pill className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <h1 className="font-heading font-bold text-xl text-foreground text-emboss">
-              {requires2FA ? 'Two-Factor Verification' : 'Pharmacy Login'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {requires2FA
-                ? 'Enter the 6-digit code from your authenticator app'
-                : 'Sign in to manage your pharmacy'}
-            </p>
+            {requires2FA ? (
+              <Shield className="w-6 h-6 text-white" />
+            ) : showForgot ? (
+              <Mail className="w-6 h-6 text-white" />
+            ) : (
+              <Pill className="w-6 h-6 text-white" />
+            )}
+          </div>
+          <h1 className="font-heading font-bold text-xl text-foreground text-emboss">
+            {requires2FA ? 'Two-Factor Verification' : showForgot ? 'Reset Password' : 'Pharmacy Login'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {requires2FA
+              ? 'Enter the 6-digit code from your authenticator app'
+              : showForgot
+              ? forgotSent ? 'Check your inbox for the reset link' : "Enter your email and we'll send a reset link"
+              : 'Sign in to manage your pharmacy'}
+          </p>
           </div>
 
           {requires2FA ? (
@@ -121,6 +148,60 @@ const PharmacyLoginPage = () => {
                 ← Back to login
               </Button>
             </form>
+          ) : showForgot ? (
+            forgotSent ? (
+              <div className="space-y-4 text-center">
+                <div className="p-4 rounded-lg bg-muted/50">
+                  <p className="text-sm text-foreground">
+                    We've sent a password reset link to <strong className="text-foreground">{forgotEmail}</strong>
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Didn't receive it? Check your spam folder or try again.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full h-11"
+                  onClick={() => { setForgotSent(false); setForgotEmail(''); }}
+                >
+                  Try another email
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="w-full text-sm gap-1"
+                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); }}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back to login
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div>
+                  <Label htmlFor="forgotEmail">Email Address</Label>
+                  <Input
+                    id="forgotEmail"
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    required
+                    className="h-11"
+                    placeholder="pharmacy@example.com"
+                    autoFocus
+                  />
+                </div>
+                <Button type="submit" className="w-full h-11" disabled={forgotLoading}>
+                  {forgotLoading ? 'Sending...' : 'Send Reset Link'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full text-sm gap-1"
+                  onClick={() => { setShowForgot(false); setForgotEmail(''); }}
+                >
+                  <ArrowLeft className="w-4 h-4" /> Back to login
+                </Button>
+              </form>
+            )
           ) : (
             <>
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -133,7 +214,7 @@ const PharmacyLoginPage = () => {
                   <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required className="h-11" />
                 </div>
                 <div className="text-right">
-                  <button type="button" className="text-sm text-primary hover:underline">Forgot password?</button>
+                  <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShowForgot(true)}>Forgot password?</button>
                 </div>
                 <Button type="submit" className="w-full h-11" disabled={isLoading}>
                   {isLoading ? 'Signing in...' : 'Sign In'}
