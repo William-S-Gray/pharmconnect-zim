@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, LogOut, Settings } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, LogOut, Settings, ScrollText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -10,6 +10,7 @@ const adminNavItems = [
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Users', icon: Users, path: '/admin/users' },
+  { label: 'Audit Log', icon: ScrollText, path: '/admin/audit-log' },
   { label: 'Settings', icon: Settings, path: '/admin/profile' },
 ];
 

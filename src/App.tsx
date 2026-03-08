@@ -30,6 +30,7 @@ const AdminAnalyticsPage = lazy(() => import("./pages/admin/AdminAnalyticsPage")
 const AdminDrugsPage = lazy(() => import("./pages/admin/AdminDrugsPage"));
 const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
 const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
+const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 
 const queryClient = new QueryClient();
 
@@ -72,6 +73,7 @@ const App = () => (
               <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="drugs" element={<AdminDrugsPage />} />
               <Route path="users" element={<AdminUsersPage />} />
+              <Route path="audit-log" element={<AdminAuditLogPage />} />
               <Route path="profile" element={<AdminProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
