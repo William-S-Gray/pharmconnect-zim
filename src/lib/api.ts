@@ -56,32 +56,39 @@ api.interceptors.response.use(
   }
 );
 
-// ── Wrap adapter for GET request deduplication ────────────────────
-const originalAdapter = api.defaults.adapter;
-
-api.defaults.adapter = async (config) => {
-  const key = getDeduplicationKey(
-    config.method || 'GET',
-    `${config.baseURL || ''}${config.url || ''}`,
-    config.params
-  );
-
-  if (key) {
-    const inflight = getInflight(key);
-    if (inflight) return inflight;
-
-    const promise = (typeof originalAdapter === 'function'
-      ? originalAdapter(config)
-      : axios.defaults.adapter!(config)
-    ) as Promise<any>;
-
-    setInflight(key, promise);
-    return promise;
+// ── GET request deduplication via response interceptor ─────────────
+api.interceptors.request.use((config) => {
+  if (config.method?.toUpperCase() === 'GET') {
+    const key = getDeduplicationKey(
+      config.method,
+      `${config.baseURL || ''}${config.url || ''}`,
+      config.params
+    );
+    if (key) {
+      const inflight = getInflight(key);
+      if (inflight) {
+        // Cancel this request and return the inflight promise's result
+        const controller = new AbortController();
+        controller.abort();
+        config.signal = controller.signal;
+        (config as any).__dedupKey = key;
+        (config as any).__dedupPromise = inflight;
+      }
+    }
   }
+  return config;
+});
 
-  return typeof originalAdapter === 'function'
-    ? originalAdapter(config)
-    : axios.defaults.adapter!(config);
-};
+// Intercept canceled dedup requests and resolve with inflight result
+api.interceptors.response.use(
+  undefined,
+  async (error) => {
+    const dedupPromise = (error.config as any)?.__dedupPromise;
+    if (dedupPromise && axios.isCancel(error)) {
+      return dedupPromise;
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;
