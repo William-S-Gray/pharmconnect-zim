@@ -14,6 +14,8 @@ const PharmacyLoginPage = lazy(() => import("./pages/PharmacyLoginPage"));
 const PharmacyDashboard = lazy(() => import("./pages/PharmacyDashboard"));
 const StockManagementPage = lazy(() => import("./pages/StockManagementPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
+const AlertSettingsPage = lazy(() => import("./pages/AlertSettingsPage"));
+const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 
 const queryClient = new QueryClient();
 
@@ -41,6 +43,8 @@ const App = () => (
               <Route index element={<PharmacyDashboard />} />
               <Route path="stock" element={<StockManagementPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
+              <Route path="alerts" element={<AlertSettingsPage />} />
+              <Route path="profile" element={<PharmacyProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
