@@ -36,16 +36,10 @@ const PharmacyLoginPage = () => {
       <div className="container mx-auto px-4 py-16 flex items-center justify-center">
         <div className="card-pharma w-full max-w-[420px]">
           <div className="text-center mb-6">
-            <div
-              className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3"
-              style={{
-                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.25) inset, 0 4px 12px rgba(0,0,0,0.2)',
-              }}
-            >
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 brand-icon-skeu">
               <Pill className="w-6 h-6 text-white" />
             </div>
-            <h1 className="font-heading font-bold text-xl text-emboss">Pharmacy Login</h1>
+            <h1 className="font-heading font-bold text-xl text-foreground text-emboss">Pharmacy Login</h1>
             <p className="text-sm text-muted-foreground">Sign in to manage your pharmacy</p>
           </div>
 

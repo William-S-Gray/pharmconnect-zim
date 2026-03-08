@@ -82,13 +82,7 @@ const Index = () => {
       </section>
 
       {/* CTA — recessed panel */}
-      <section
-        className="border-t border-border cta-section"
-        style={{
-          background: 'linear-gradient(180deg, hsl(210 25% 91%) 0%, hsl(210 25% 93%) 100%)',
-          boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.05)',
-        }}
-      >
+      <section className="border-t border-border cta-section">
         <div className="container mx-auto px-4 py-12 md:py-16 text-center">
           <h2 className="font-heading font-bold text-2xl text-foreground mb-3 text-emboss">Are you a pharmacy?</h2>
           <p className="text-muted-foreground mb-6">List your pharmacy for free and reach patients searching for medicines near you.</p>
@@ -102,13 +96,7 @@ const Index = () => {
       <footer className="skeu-toolbar border-t py-8">
         <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
-            <div
-              className="w-6 h-6 rounded flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 17%) 100%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.2) inset, 0 1px 3px rgba(0,0,0,0.12)',
-              }}
-            >
+            <div className="w-6 h-6 rounded flex items-center justify-center brand-icon-skeu">
               <Pill className="w-3 h-3 text-white" />
             </div>
             <span className="font-heading font-semibold text-foreground text-emboss">PharmTrack</span>

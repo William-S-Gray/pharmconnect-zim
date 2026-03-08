@@ -66,15 +66,7 @@ const SubscriptionPage = () => {
               className={`card-pharma relative overflow-hidden ${plan.popular ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''}`}
             >
               {plan.popular && (
-                <span
-                  className="absolute -top-0 left-1/2 -translate-x-1/2 text-[10px] font-bold px-4 py-1 rounded-b-lg flex items-center gap-1"
-                  style={{
-                    background: 'linear-gradient(180deg, hsl(174 90% 30%) 0%, hsl(176 100% 20%) 100%)',
-                    color: 'white',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                    textShadow: '0 1px 1px rgba(0,0,0,0.2)',
-                  }}
-                >
+                <span className="absolute -top-0 left-1/2 -translate-x-1/2 text-[10px] font-bold px-4 py-1 rounded-b-lg flex items-center gap-1 popular-badge-skeu">
                   <Star className="w-3 h-3" /> POPULAR
                 </span>
               )}
@@ -86,13 +78,7 @@ const SubscriptionPage = () => {
               <ul className="space-y-2 mb-6 text-sm">
                 {plan.features.map(f => (
                   <li key={f} className="flex items-center gap-2 text-foreground">
-                    <span
-                      className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: 'linear-gradient(180deg, hsl(160 80% 45%) 0%, hsl(160 100% 35%) 100%)',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                      }}
-                    >
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 check-icon-skeu">
                       <Check className="w-2.5 h-2.5 text-white" />
                     </span>
                     {f}
@@ -100,13 +86,7 @@ const SubscriptionPage = () => {
                 ))}
                 {plan.missing.map(f => (
                   <li key={f} className="flex items-center gap-2 text-muted-foreground">
-                    <span
-                      className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                      style={{
-                        background: 'linear-gradient(180deg, hsl(210 20% 90%) 0%, hsl(210 20% 85%) 100%)',
-                        boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.06)',
-                      }}
-                    >
+                    <span className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 missing-icon-skeu">
                       <X className="w-2.5 h-2.5 text-muted-foreground" />
                     </span>
                     {f}
