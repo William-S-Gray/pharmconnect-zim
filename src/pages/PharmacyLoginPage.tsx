@@ -96,20 +96,24 @@ const PharmacyLoginPage = () => {
         <div className="card-pharma w-full max-w-[420px]">
           <div className="text-center mb-6">
             <div className="w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-3 brand-icon-skeu">
-              {requires2FA ? (
-                <Shield className="w-6 h-6 text-white" />
-              ) : (
-                <Pill className="w-6 h-6 text-white" />
-              )}
-            </div>
-            <h1 className="font-heading font-bold text-xl text-foreground text-emboss">
-              {requires2FA ? 'Two-Factor Verification' : 'Pharmacy Login'}
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              {requires2FA
-                ? 'Enter the 6-digit code from your authenticator app'
-                : 'Sign in to manage your pharmacy'}
-            </p>
+            {requires2FA ? (
+              <Shield className="w-6 h-6 text-white" />
+            ) : showForgot ? (
+              <Mail className="w-6 h-6 text-white" />
+            ) : (
+              <Pill className="w-6 h-6 text-white" />
+            )}
+          </div>
+          <h1 className="font-heading font-bold text-xl text-foreground text-emboss">
+            {requires2FA ? 'Two-Factor Verification' : showForgot ? 'Reset Password' : 'Pharmacy Login'}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {requires2FA
+              ? 'Enter the 6-digit code from your authenticator app'
+              : showForgot
+              ? forgotSent ? 'Check your inbox for the reset link' : "Enter your email and we'll send a reset link"
+              : 'Sign in to manage your pharmacy'}
+          </p>
           </div>
 
           {requires2FA ? (
