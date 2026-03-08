@@ -1,6 +1,7 @@
-import { Link, useLocation, Outlet } from 'react-router-dom';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -12,10 +13,17 @@ const navItems = [
 
 export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { pharmacy, logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
 
   return (
     <div className="min-h-screen bg-background flex">
-      {/* Sidebar — skeuomorphic raised panel */}
+      {/* Sidebar */}
       <aside
         className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40"
         style={{
@@ -40,8 +48,8 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
 
         <div className="px-3 py-4">
           <div className="card-pharma mb-4 p-3">
-            <p className="font-heading font-semibold text-sm truncate text-emboss">Halsteads Pharmacy</p>
-            <span className="badge-approved text-[10px] mt-1">Approved</span>
+            <p className="font-heading font-semibold text-sm truncate text-emboss">{pharmacy?.name || 'Pharmacy'}</p>
+            <span className="badge-approved text-[10px] mt-1">{pharmacy?.status || 'PENDING'}</span>
           </div>
         </div>
 
@@ -67,13 +75,16 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
         </nav>
 
         <div className="p-3 border-t border-border">
-          <Link to="/" className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss transition-colors">
+          <button
+            onClick={handleLogout}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss transition-colors w-full"
+          >
             <LogOut className="w-4 h-4" /> Logout
-          </Link>
+          </button>
         </div>
       </aside>
 
-      {/* Mobile bottom nav — raised skeuomorphic bar */}
+      {/* Mobile bottom nav */}
       <nav
         className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border"
         style={{

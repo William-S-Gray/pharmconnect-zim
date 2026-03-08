@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Bell, Phone, Clock, Send, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,21 +7,56 @@ import { Switch } from '@/components/ui/switch';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
-
-const mockDrugThresholds = [
-  { id: '1', drug: 'Metformin 500mg', threshold: 15, alertsEnabled: true },
-  { id: '2', drug: 'Amoxil 500mg', threshold: 10, alertsEnabled: true },
-  { id: '3', drug: 'Panadol 500mg', threshold: 20, alertsEnabled: false },
-  { id: '4', drug: 'Ibuprofen 400mg', threshold: 10, alertsEnabled: true },
-  { id: '5', drug: 'Ciprofloxacin 500mg', threshold: 12, alertsEnabled: true },
-];
+import { useAuth } from '@/context/AuthContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const AlertSettingsPage = () => {
-  const [phone, setPhone] = useState('0771 234 567');
+  const { pharmacy } = useAuth();
+  const queryClient = useQueryClient();
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ['alert-settings', pharmacy?.id],
+    queryFn: () => api.get('/api/alerts/settings').then(r => r.data.settings),
+    enabled: !!pharmacy,
+  });
+
+  const [phone, setPhone] = useState('');
   const [defaultThreshold, setDefaultThreshold] = useState(10);
   const [frequency, setFrequency] = useState('daily');
-  const [drugThresholds, setDrugThresholds] = useState(mockDrugThresholds);
+  const [drugThresholds, setDrugThresholds] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (settings) {
+      setPhone(settings.phone || '');
+      setDefaultThreshold(settings.default_threshold || 10);
+      setFrequency(settings.frequency || 'daily');
+      setDrugThresholds(settings.drug_thresholds || []);
+    }
+  }, [settings]);
+
+  const saveMutation = useMutation({
+    mutationFn: (data: any) => api.put('/api/alerts/settings', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['alert-settings'] });
+      toast({ title: 'Settings saved', description: 'Your alert preferences have been updated.' });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.error || 'Failed to save settings.' });
+    },
+  });
+
+  const testSmsMutation = useMutation({
+    mutationFn: () => api.post('/api/alerts/test'),
+    onSuccess: () => {
+      toast({ title: 'Test SMS sent', description: `A test message has been sent to ${phone}.` });
+    },
+    onError: (error: any) => {
+      toast({ title: 'Error', description: error.response?.data?.error || 'Failed to send test SMS.' });
+    },
+  });
 
   const handleToggleAlert = (id: string) => {
     setDrugThresholds(prev =>
@@ -36,12 +71,25 @@ const AlertSettingsPage = () => {
   };
 
   const handleSave = () => {
-    toast({ title: 'Settings saved', description: 'Your alert preferences have been updated.' });
+    saveMutation.mutate({
+      phone,
+      default_threshold: defaultThreshold,
+      frequency,
+      drug_thresholds: drugThresholds,
+    });
   };
 
   const handleTestSMS = () => {
-    toast({ title: 'Test SMS sent', description: `A test message has been sent to ${phone}.` });
+    testSmsMutation.mutate();
   };
+
+  if (isLoading) {
+    return (
+      <div className="py-16">
+        <LoadingSpinner size="lg" label="Loading alert settings..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
@@ -67,9 +115,9 @@ const AlertSettingsPage = () => {
               placeholder="07XX XXX XXXX"
               className="max-w-xs"
             />
-            <Button variant="outline" size="sm" onClick={handleTestSMS}>
+            <Button variant="outline" size="sm" onClick={handleTestSMS} disabled={testSmsMutation.isPending}>
               <Send className="w-4 h-4 mr-1" />
-              Send Test SMS
+              {testSmsMutation.isPending ? 'Sending...' : 'Send Test SMS'}
             </Button>
           </div>
         </CardContent>
@@ -134,70 +182,71 @@ const AlertSettingsPage = () => {
         </CardContent>
       </Card>
 
-      {/* Per-Drug Thresholds — recessed table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Per-Drug Thresholds</CardTitle>
-          <CardDescription>Override the default threshold for specific drugs</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="skeu-inset p-1 space-y-0">
-            {/* Header */}
-            <div
-              className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md"
-              style={{
-                background: 'linear-gradient(180deg, hsl(210 20% 94%) 0%, hsl(210 20% 90%) 100%)',
-              }}
-            >
-              <span className="text-emboss">Drug</span>
-              <span className="text-emboss">Threshold</span>
-              <span className="text-emboss">Alerts</span>
-            </div>
-
-            {drugThresholds.map((item) => (
+      {/* Per-Drug Thresholds */}
+      {drugThresholds.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Per-Drug Thresholds</CardTitle>
+            <CardDescription>Override the default threshold for specific drugs</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="skeu-inset p-1 space-y-0">
               <div
-                key={item.id}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30"
-                style={{ background: 'hsl(0 0% 99%)' }}
+                className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md"
+                style={{
+                  background: 'linear-gradient(180deg, hsl(210 20% 94%) 0%, hsl(210 20% 90%) 100%)',
+                }}
               >
-                <span className="font-mono text-sm font-medium text-foreground">{item.drug}</span>
-
-                <div className="flex items-center gap-2">
-                  {editingId === item.id ? (
-                    <Input
-                      type="number"
-                      value={item.threshold}
-                      onChange={(e) => handleThresholdChange(item.id, Number(e.target.value))}
-                      className="h-8 w-20 text-sm"
-                      min={1}
-                      onBlur={() => setEditingId(null)}
-                      autoFocus
-                    />
-                  ) : (
-                    <button
-                      onClick={() => setEditingId(item.id)}
-                      className="text-sm text-foreground hover:text-primary transition-colors cursor-pointer"
-                    >
-                      {item.threshold} units
-                    </button>
-                  )}
-                </div>
-
-                <Switch
-                  checked={item.alertsEnabled}
-                  onCheckedChange={() => handleToggleAlert(item.id)}
-                />
+                <span className="text-emboss">Drug</span>
+                <span className="text-emboss">Threshold</span>
+                <span className="text-emboss">Alerts</span>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+
+              {drugThresholds.map((item) => (
+                <div
+                  key={item.id}
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30"
+                  style={{ background: 'hsl(0 0% 99%)' }}
+                >
+                  <span className="font-mono text-sm font-medium text-foreground">{item.drug}</span>
+
+                  <div className="flex items-center gap-2">
+                    {editingId === item.id ? (
+                      <Input
+                        type="number"
+                        value={item.threshold}
+                        onChange={(e) => handleThresholdChange(item.id, Number(e.target.value))}
+                        className="h-8 w-20 text-sm"
+                        min={1}
+                        onBlur={() => setEditingId(null)}
+                        autoFocus
+                      />
+                    ) : (
+                      <button
+                        onClick={() => setEditingId(item.id)}
+                        className="text-sm text-foreground hover:text-primary transition-colors cursor-pointer"
+                      >
+                        {item.threshold} units
+                      </button>
+                    )}
+                  </div>
+
+                  <Switch
+                    checked={item.alertsEnabled}
+                    onCheckedChange={() => handleToggleAlert(item.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Save Button */}
       <div className="flex gap-3 pt-2">
-        <Button onClick={handleSave} className="gap-2">
+        <Button onClick={handleSave} className="gap-2" disabled={saveMutation.isPending}>
           <Save className="w-4 h-4" />
-          Save Settings
+          {saveMutation.isPending ? 'Saving...' : 'Save Settings'}
         </Button>
       </div>
     </div>

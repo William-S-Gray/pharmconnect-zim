@@ -1,24 +1,27 @@
 import * as XLSX from 'xlsx';
 
 interface ExportItem {
-  drugName: string;
+  drugName?: string;
+  common_name?: string;
   strength: string;
   form: string;
   quantity: number;
-  unitPrice: number;
+  unitPrice?: number;
+  unit_price?: number;
   threshold: number;
-  status: string;
+  status?: string;
+  stock_status?: string;
 }
 
 function buildExportData(items: ExportItem[]) {
   return items.map(item => ({
-    'Drug Name': item.drugName,
+    'Drug Name': item.drugName || item.common_name || '',
     'Strength': item.strength,
     'Form': item.form,
     'Quantity': item.quantity,
-    'Unit Price (USD)': item.unitPrice,
+    'Unit Price (USD)': item.unitPrice ?? item.unit_price ?? 0,
     'Reorder Threshold': item.threshold,
-    'Status': item.status.replace('_', ' '),
+    'Status': (item.status || item.stock_status || '').replace('_', ' '),
   }));
 }
 

@@ -1,26 +1,65 @@
 import { useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { DrugSearchBar } from '@/components/DrugSearchBar';
 import { PharmacyResultCard } from '@/components/PharmacyResultCard';
 import { EmptyState } from '@/components/EmptyState';
-import { searchStock } from '@/lib/mockData';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { SearchX } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import api from '@/lib/api';
+import type { StockStatus } from '@/lib/mockData';
+
+interface SearchResult {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  suburb: string;
+  city: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  quantity: number;
+  unit_price: number;
+  stock_status: StockStatus;
+  distance_km: number;
+  common_name: string;
+  strength: string;
+}
 
 const SearchResultsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const drugQuery = searchParams.get('drug') || '';
   const cityParam = searchParams.get('city') || 'Harare';
+  const lat = searchParams.get('lat');
+  const lng = searchParams.get('lng');
   const [sortBy, setSortBy] = useState<'nearest' | 'price' | 'stock'>('stock');
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const results = searchStock(drugQuery, cityParam);
+  useEffect(() => {
+    if (!drugQuery) return;
+    const fetchResults = async () => {
+      try {
+        setLoading(true);
+        const params: Record<string, string> = { drug: drugQuery, city: cityParam };
+        if (lat) params.lat = lat;
+        if (lng) params.lng = lng;
+        const res = await api.get('/api/search', { params });
+        setResults(res.data.results || []);
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchResults();
+  }, [drugQuery, cityParam, lat, lng]);
 
   const sorted = [...results].sort((a, b) => {
-    if (sortBy === 'nearest') return a.distanceKm - b.distanceKm;
+    if (sortBy === 'nearest') return a.distance_km - b.distance_km;
     if (sortBy === 'price') return (a.unit_price || 999) - (b.unit_price || 999);
-    const statusOrder = { IN_STOCK: 0, LOW_STOCK: 1, OUT_OF_STOCK: 2 };
-    return statusOrder[a.stockStatus] - statusOrder[b.stockStatus];
+    const statusOrder: Record<string, number> = { IN_STOCK: 0, LOW_STOCK: 1, OUT_OF_STOCK: 2 };
+    return (statusOrder[a.stock_status] ?? 2) - (statusOrder[b.stock_status] ?? 2);
   });
 
   const handleSearch = (query: string) => {
@@ -31,7 +70,6 @@ const SearchResultsPage = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      {/* Search bar — raised toolbar */}
       <div className="skeu-toolbar border-b py-3 px-4">
         <div className="container mx-auto">
           <DrugSearchBar variant="compact" initialQuery={drugQuery} onSearch={handleSearch} />
@@ -40,7 +78,6 @@ const SearchResultsPage = () => {
 
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
-          {/* Results */}
           <div className="flex-1">
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
@@ -61,7 +98,11 @@ const SearchResultsPage = () => {
               </Select>
             </div>
 
-            {sorted.length === 0 ? (
+            {loading ? (
+              <div className="py-12">
+                <LoadingSpinner size="lg" label="Searching pharmacies..." />
+              </div>
+            ) : sorted.length === 0 ? (
               <EmptyState
                 icon={SearchX}
                 title="No pharmacies found"
@@ -71,27 +112,24 @@ const SearchResultsPage = () => {
               <div className="space-y-3">
                 {sorted.map((result) => (
                   <PharmacyResultCard
-                    key={result.id}
-                    pharmacyName={result.pharmacy.name}
-                    suburb={result.pharmacy.suburb}
-                    city={result.pharmacy.city}
-                    distanceKm={result.distanceKm}
-                    stockStatus={result.stockStatus}
+                    key={result.pharmacy_id}
+                    pharmacyName={result.pharmacy_name}
+                    suburb={result.suburb}
+                    city={result.city}
+                    distanceKm={result.distance_km}
+                    stockStatus={result.stock_status}
                     quantity={result.quantity}
                     unitPrice={result.unit_price}
-                    phone={result.pharmacy.phone}
-                    isOpenNow={result.pharmacy.is_open_24h || Math.random() > 0.3}
+                    phone={result.phone}
+                    isOpenNow={true}
                   />
                 ))}
               </div>
             )}
           </div>
 
-          {/* Map placeholder — recessed */}
           <div className="hidden lg:block w-96 flex-shrink-0">
-            <div
-              className="sticky top-20 h-[calc(100vh-6rem)] rounded-xl flex items-center justify-center skeu-inset"
-            >
+            <div className="sticky top-20 h-[calc(100vh-6rem)] rounded-xl flex items-center justify-center skeu-inset">
               <div className="text-center text-muted-foreground p-4">
                 <MapPlaceholder />
               </div>

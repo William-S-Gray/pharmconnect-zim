@@ -3,13 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StockStatusBadge } from '@/components/StockStatusBadge';
 import { Plus, Search, Upload, Download, FileSpreadsheet, Trash2, Pencil } from 'lucide-react';
-import { getStockStatus } from '@/lib/mockData';
 import type { StockStatus } from '@/lib/mockData';
 import { AddEditDrugSheet, type StockFormData } from '@/components/AddEditDrugSheet';
 import { ImportModal } from '@/components/ImportModal';
 import { exportToCSV, exportToExcel } from '@/lib/exportUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
+import { useAuth } from '@/context/AuthContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -20,119 +22,131 @@ import {
 
 interface StockItem {
   id: string;
-  drugId: string;
+  drug_id: string;
   drugName: string;
+  common_name?: string;
   strength: string;
   form: string;
   quantity: number;
-  unitPrice: number;
+  unit_price: number;
   threshold: number;
-  expiryDate: string;
-  isAvailable: boolean;
-  status: StockStatus;
+  expiry_date: string;
+  is_available: boolean;
+  stock_status: StockStatus;
 }
 
-const initialItems: StockItem[] = [
-  { id: '1', drugId: '2', drugName: 'Metformin', strength: '500mg', form: 'tablet', quantity: 45, unitPrice: 2.5, threshold: 10, expiryDate: '2025-12-01', isAvailable: true, status: 'IN_STOCK' },
-  { id: '2', drugId: '3', drugName: 'Amoxil', strength: '500mg', form: 'capsule', quantity: 8, unitPrice: 3.0, threshold: 10, expiryDate: '2025-09-01', isAvailable: true, status: 'LOW_STOCK' },
-  { id: '3', drugId: '1', drugName: 'Panadol', strength: '500mg', form: 'tablet', quantity: 0, unitPrice: 1.2, threshold: 20, expiryDate: '', isAvailable: false, status: 'OUT_OF_STOCK' },
-  { id: '4', drugId: '4', drugName: 'Amlodipine', strength: '5mg', form: 'tablet', quantity: 120, unitPrice: 4.0, threshold: 10, expiryDate: '2026-06-01', isAvailable: true, status: 'IN_STOCK' },
-  { id: '5', drugId: '5', drugName: 'Omeprazole', strength: '20mg', form: 'capsule', quantity: 6, unitPrice: 5.5, threshold: 10, expiryDate: '2025-11-15', isAvailable: true, status: 'LOW_STOCK' },
-  { id: '6', drugId: '10', drugName: 'Ventolin', strength: '100mcg', form: 'inhaler', quantity: 22, unitPrice: 12.0, threshold: 5, expiryDate: '2026-08-01', isAvailable: true, status: 'IN_STOCK' },
-];
-
 const StockManagementPage = () => {
-  const [items, setItems] = useState<StockItem[]>(initialItems);
+  const { pharmacy } = useAuth();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | StockStatus>('ALL');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editItem, setEditItem] = useState<StockFormData | null>(null);
   const [editItemId, setEditItemId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['stock', pharmacy?.id],
+    queryFn: () => api.get('/api/stock').then(r => r.data),
+    enabled: !!pharmacy,
+  });
+
+  const items: StockItem[] = (data?.stock || []).map((s: any) => ({
+    id: s.id,
+    drug_id: s.drug_id,
+    drugName: s.common_name || s.drug_name || '',
+    common_name: s.common_name,
+    strength: s.strength || '',
+    form: s.form || '',
+    quantity: s.quantity,
+    unit_price: s.unit_price,
+    threshold: s.threshold,
+    expiry_date: s.expiry_date || '',
+    is_available: s.is_available,
+    stock_status: s.stock_status || 'IN_STOCK',
+  }));
 
   const filtered = items.filter(item => {
     const matchesSearch = item.drugName.toLowerCase().includes(search.toLowerCase()) ||
       item.strength.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'ALL' || item.status === filter;
+    const matchesFilter = filter === 'ALL' || item.stock_status === filter;
     return matchesSearch && matchesFilter;
   });
 
-  const handleAddDrug = (data: StockFormData) => {
-    const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
-    const newItem: StockItem = {
-      id: Date.now().toString(),
-      drugId: data.drugId || `custom-${Date.now()}`,
-      drugName: data.drugName,
-      strength: data.strength,
-      form: data.form,
-      quantity: data.quantity,
-      unitPrice: data.unitPrice,
-      threshold: data.threshold,
-      expiryDate: data.expiryDate,
-      isAvailable: data.isAvailable,
-      status,
-    };
-    setItems(prev => [...prev, newItem]);
-    toast.success(`${data.drugName} added to inventory`);
+  const addMutation = useMutation({
+    mutationFn: (payload: any) => api.post('/api/stock', payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success('Drug added to inventory');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to add drug');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ drugId, data }: { drugId: string; data: any }) => api.put(`/api/stock/${drugId}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success('Drug updated');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to update drug');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (drugId: string) => api.delete(`/api/stock/${drugId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success('Drug removed from inventory');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.error || 'Failed to remove drug');
+    },
+  });
+
+  const handleAddDrug = (formData: StockFormData) => {
+    addMutation.mutate({
+      drug_id: formData.drugId,
+      quantity: formData.quantity,
+      unit_price: formData.unitPrice,
+      threshold: formData.threshold,
+      expiry_date: formData.expiryDate || null,
+    });
   };
 
-  const handleEditDrug = (data: StockFormData) => {
+  const handleEditDrug = (formData: StockFormData) => {
     if (!editItemId) return;
-    const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
-    setItems(prev => prev.map(item =>
-      item.id === editItemId
-        ? {
-            ...item,
-            drugName: data.drugName,
-            strength: data.strength,
-            form: data.form,
-            quantity: data.quantity,
-            unitPrice: data.unitPrice,
-            threshold: data.threshold,
-            expiryDate: data.expiryDate,
-            isAvailable: data.isAvailable,
-            status,
-          }
-        : item
-    ));
+    updateMutation.mutate({
+      drugId: editItemId,
+      data: {
+        quantity: formData.quantity,
+        unit_price: formData.unitPrice,
+        threshold: formData.threshold,
+        expiry_date: formData.expiryDate || null,
+        is_available: formData.isAvailable,
+      },
+    });
     setEditItem(null);
     setEditItemId(null);
-    toast.success(`${data.drugName} updated`);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
-    const drug = items.find(i => i.id === deleteId);
-    setItems(prev => prev.filter(item => item.id !== deleteId));
+    deleteMutation.mutate(deleteId);
     setDeleteId(null);
-    toast.success(`${drug?.drugName || 'Drug'} removed from inventory`);
   };
 
-  const handleImport = (rows: { drug_name: string; quantity: number; unit_price: number; threshold: number }[]) => {
-    setLoading(true);
-    setTimeout(() => {
-      const newItems: StockItem[] = rows.map((row, i) => {
-        const status = getStockStatus(row.quantity, row.threshold, true);
-        return {
-          id: `imp-${Date.now()}-${i}`,
-          drugId: '',
-          drugName: row.drug_name,
-          strength: '',
-          form: '',
-          quantity: row.quantity,
-          unitPrice: row.unit_price,
-          threshold: row.threshold,
-          expiryDate: '',
-          isAvailable: true,
-          status,
-        };
-      });
-      setItems(prev => [...prev, ...newItems]);
-      setLoading(false);
-      toast.success(`${rows.length} drug(s) imported`);
-    }, 500);
+  const handleImport = async (rows: any[]) => {
+    try {
+      const res = await api.post('/api/stock/bulk-import', { items: rows });
+      queryClient.invalidateQueries({ queryKey: ['stock'] });
+      toast.success(`${res.data.imported || rows.length} drug(s) imported`);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Import failed');
+    }
   };
 
   const handleExportCSV = () => {
@@ -148,15 +162,15 @@ const StockManagementPage = () => {
   const openEdit = (item: StockItem) => {
     setEditItemId(item.id);
     setEditItem({
-      drugId: item.drugId,
+      drugId: item.drug_id,
       drugName: item.drugName,
       strength: item.strength,
       form: item.form,
       quantity: item.quantity,
-      unitPrice: item.unitPrice,
+      unitPrice: item.unit_price,
       threshold: item.threshold,
-      expiryDate: item.expiryDate,
-      isAvailable: item.isAvailable,
+      expiryDate: item.expiry_date,
+      isAvailable: item.is_available,
     });
     setSheetOpen(true);
   };
@@ -194,13 +208,11 @@ const StockManagementPage = () => {
         </div>
       </div>
 
-      {loading && (
+      {isLoading ? (
         <div className="py-8">
-          <LoadingSpinner size="md" label="Updating inventory..." />
+          <LoadingSpinner size="md" label="Loading inventory..." />
         </div>
-      )}
-
-      {!loading && (
+      ) : (
         <>
           {/* Desktop table */}
           <div className="hidden md:block skeu-inset overflow-hidden p-0">
@@ -219,11 +231,11 @@ const StockManagementPage = () => {
                   <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors" style={{ background: 'hsl(0 0% 99%)' }}>
                     <td className="p-3">
                       <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
-                      <p className="text-xs text-muted-foreground">{item.form}{item.expiryDate ? ` · Exp: ${item.expiryDate}` : ''}</p>
+                      <p className="text-xs text-muted-foreground">{item.form}{item.expiry_date ? ` · Exp: ${item.expiry_date}` : ''}</p>
                     </td>
                     <td className="p-3 text-right font-mono-drug">{item.quantity}</td>
-                    <td className="p-3 text-right font-mono-drug">${item.unitPrice.toFixed(2)}</td>
-                    <td className="p-3 text-center"><StockStatusBadge status={item.status} /></td>
+                    <td className="p-3 text-right font-mono-drug">${item.unit_price.toFixed(2)}</td>
+                    <td className="p-3 text-center"><StockStatusBadge status={item.stock_status} /></td>
                     <td className="p-3 text-right">
                       <div className="flex gap-1 justify-end">
                         <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openEdit(item)}>
@@ -250,13 +262,13 @@ const StockManagementPage = () => {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
-                    <p className="text-xs text-muted-foreground">{item.form}{item.expiryDate ? ` · Exp: ${item.expiryDate}` : ''}</p>
+                    <p className="text-xs text-muted-foreground">{item.form}{item.expiry_date ? ` · Exp: ${item.expiry_date}` : ''}</p>
                   </div>
-                  <StockStatusBadge status={item.status} />
+                  <StockStatusBadge status={item.stock_status} />
                 </div>
                 <div className="flex items-center justify-between mt-3 text-sm">
                   <span className="text-muted-foreground">Qty: <span className="font-mono-drug text-foreground">{item.quantity}</span></span>
-                  <span className="font-mono-drug text-foreground">${item.unitPrice.toFixed(2)}</span>
+                  <span className="font-mono-drug text-foreground">${item.unit_price.toFixed(2)}</span>
                   <div className="flex gap-1">
                     <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openEdit(item)}>
                       <Pencil className="w-3 h-3" /> Edit

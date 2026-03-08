@@ -4,13 +4,21 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Search, Save, PlusCircle } from 'lucide-react';
-import { searchDrugs, mockDrugs, type Drug } from '@/lib/mockData';
+import api from '@/lib/api';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+
+interface Suggestion {
+  id: string;
+  common_name: string;
+  generic_name: string;
+  strength: string;
+  form: string;
+}
 
 export interface StockFormData {
   drugId: string;
@@ -37,9 +45,9 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
   const isEdit = !!editData;
   const [mode, setMode] = useState<'search' | 'custom'>('search');
   const [drugSearch, setDrugSearch] = useState('');
-  const [drugResults, setDrugResults] = useState<Drug[]>([]);
+  const [drugResults, setDrugResults] = useState<Suggestion[]>([]);
   const [showDrugList, setShowDrugList] = useState(false);
-  const [selectedDrug, setSelectedDrug] = useState<Drug | null>(null);
+  const [selectedDrug, setSelectedDrug] = useState<Suggestion | null>(null);
   const [form, setForm] = useState<StockFormData>({
     drugId: '', drugName: '', strength: '', form: '',
     quantity: 0, unitPrice: 0, threshold: 10,
@@ -50,7 +58,7 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
   useEffect(() => {
     if (editData) {
       setForm(editData);
-      setSelectedDrug(mockDrugs.find(d => d.id === editData.drugId) || null);
+      setSelectedDrug(null);
       setDrugSearch('');
       setMode('search');
     } else {
@@ -68,14 +76,25 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
   const handleDrugSearch = (value: string) => {
     setDrugSearch(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const found = searchDrugs(value);
-      setDrugResults(found);
-      setShowDrugList(found.length > 0);
+    if (value.length < 2) {
+      setDrugResults([]);
+      setShowDrugList(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/search/autocomplete', { params: { q: value } });
+        const suggestions: Suggestion[] = res.data.suggestions || [];
+        setDrugResults(suggestions);
+        setShowDrugList(suggestions.length > 0);
+      } catch {
+        setDrugResults([]);
+        setShowDrugList(false);
+      }
     }, 300);
   };
 
-  const handleSelectDrug = (drug: Drug) => {
+  const handleSelectDrug = (drug: Suggestion) => {
     setSelectedDrug(drug);
     setShowDrugList(false);
     setDrugSearch('');
@@ -122,7 +141,6 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
-          {/* Drug selector — only for adding */}
           {!isEdit && mode === 'search' && (
             <div className="relative">
               <Label>Search Drug</Label>
@@ -154,7 +172,6 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
                 </div>
               )}
 
-              {/* Add custom drug button */}
               <Button
                 type="button"
                 variant="outline"
@@ -168,7 +185,6 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
             </div>
           )}
 
-          {/* Custom drug entry fields */}
           {!isEdit && mode === 'custom' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -211,7 +227,6 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
             </div>
           )}
 
-          {/* Selected drug info pill */}
           {(selectedDrug || isEdit) && (
             <div className="card-pharma p-3">
               <p className="font-heading font-semibold text-sm text-foreground text-emboss">
@@ -221,7 +236,6 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
             </div>
           )}
 
-          {/* Stock fields — show when drug is selected/custom filled or editing */}
           {(drugSelected || isEdit) && (
             <>
               <div className="grid grid-cols-2 gap-4">
