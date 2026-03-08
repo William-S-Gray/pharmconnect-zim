@@ -386,7 +386,7 @@ const AdminUsersPage = () => {
             <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Create New User</DialogTitle>
             <DialogDescription>Add a new pharmacy account to the system</DialogDescription>
           </DialogHeader>
-          <UserFormFields isCreate />
+          {renderFormFields(true)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button disabled={createMutation.isPending || !formData.name || !formData.email} onClick={() => createMutation.mutate(formData)}>
