@@ -116,7 +116,6 @@ const PharmacyLoginPage = () => {
     } finally {
       setIsLoading(false);
     }
-    }
   };
 
   const handle2FAVerify = async (e: React.FormEvent) => {
