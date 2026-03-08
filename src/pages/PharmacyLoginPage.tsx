@@ -8,6 +8,7 @@ import { Pill, Shield, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import { MathCaptcha } from '@/components/MathCaptcha';
 
 const PharmacyLoginPage = () => {
   const navigate = useNavigate();
@@ -26,10 +27,14 @@ const PharmacyLoginPage = () => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail) return;
+    if (!forgotEmail || !captchaVerified) {
+      if (!captchaVerified) toast.error('Please solve the security check first');
+      return;
+    }
     try {
       setForgotLoading(true);
       await api.post('/api/auth/forgot-password', { email: forgotEmail });
@@ -162,14 +167,14 @@ const PharmacyLoginPage = () => {
                 <Button
                   variant="outline"
                   className="w-full h-11"
-                  onClick={() => { setForgotSent(false); setForgotEmail(''); }}
+                  onClick={() => { setForgotSent(false); setForgotEmail(''); setCaptchaVerified(false); }}
                 >
                   Try another email
                 </Button>
                 <Button
                   variant="ghost"
                   className="w-full text-sm gap-1"
-                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); }}
+                  onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(''); setCaptchaVerified(false); }}
                 >
                   <ArrowLeft className="w-4 h-4" /> Back to login
                 </Button>
@@ -189,7 +194,8 @@ const PharmacyLoginPage = () => {
                     autoFocus
                   />
                 </div>
-                <Button type="submit" className="w-full h-11" disabled={forgotLoading}>
+                <MathCaptcha onVerified={setCaptchaVerified} />
+                <Button type="submit" className="w-full h-11" disabled={forgotLoading || !captchaVerified}>
                   {forgotLoading ? 'Sending...' : 'Send Reset Link'}
                 </Button>
                 <Button
