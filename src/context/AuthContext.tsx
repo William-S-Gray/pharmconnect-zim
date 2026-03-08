@@ -5,6 +5,8 @@ import { refreshCsrfToken, clearCsrfToken } from '../lib/csrfToken';
 import { sessionTimeout } from '../lib/sessionTimeout';
 import { toast } from 'sonner';
 
+export type UserRole = 'pharmacy' | 'admin';
+
 export interface Pharmacy {
   id: string;
   name: string;
@@ -14,6 +16,7 @@ export interface Pharmacy {
   suburb: string;
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
+  role?: UserRole;
 }
 
 interface AuthContextType {
@@ -23,6 +26,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isApproved: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
