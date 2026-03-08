@@ -231,7 +231,7 @@ const StockManagementPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map(item => (
+                {pagination.paginatedItems.map(item => (
                   <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors table-row-skeu">
                     <td className="p-3">
                       <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
@@ -261,7 +261,7 @@ const StockManagementPage = () => {
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
-            {filtered.map(item => (
+            {pagination.paginatedItems.map(item => (
               <div key={item.id} className="card-pharma">
                 <div className="flex items-start justify-between">
                   <div>
@@ -285,6 +285,17 @@ const StockManagementPage = () => {
               </div>
             ))}
           </div>
+
+          <PaginationControls
+            page={pagination.page} totalPages={pagination.totalPages}
+            canPrev={pagination.canPrev} canNext={pagination.canNext}
+            onPrev={pagination.prevPage} onNext={pagination.nextPage}
+            onPageChange={pagination.setPage}
+            startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
+            pageSizeOptions={[10, 20, 50]}
+          />
         </>
       )}
 
