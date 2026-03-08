@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
+import { FullPageSpinner } from "./components/LoadingSpinner";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { DashboardLayout } from "./components/DashboardLayout";
@@ -20,11 +21,7 @@ const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 const queryClient = new QueryClient();
 
 function PageLoading() {
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-    </div>
-  );
+  return <FullPageSpinner />;
 }
 
 const App = () => (
