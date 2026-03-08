@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Pill, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -24,6 +25,7 @@ export function Navbar() {
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-3">
+          <ThemeToggle />
           <Button variant="outline" asChild>
             <Link to="/pharmacy/register">List Your Pharmacy</Link>
           </Button>
@@ -33,13 +35,16 @@ export function Navbar() {
         </div>
 
         {/* Mobile toggle */}
-        <button className="md:hidden p-2 rounded-lg hover:bg-muted/60 transition-colors" onClick={() => setMobileOpen(!mobileOpen)}>
-          {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
+        <div className="flex md:hidden items-center gap-1">
+          <ThemeToggle />
+          <button className="p-2 rounded-lg hover:bg-muted/60 transition-colors" onClick={() => setMobileOpen(!mobileOpen)}>
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-border px-4 py-3 flex flex-col gap-2 animate-fade-in" style={{ background: 'linear-gradient(180deg, hsl(0 0% 98%) 0%, hsl(210 20% 94%) 100%)' }}>
+        <div className="md:hidden border-t border-border px-4 py-3 flex flex-col gap-2 animate-fade-in bg-card">
           <Button variant="outline" asChild className="w-full">
             <Link to="/pharmacy/register" onClick={() => setMobileOpen(false)}>List Your Pharmacy</Link>
           </Button>
