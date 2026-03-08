@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Building2, MapPin, Phone, Mail, Clock, Shield } from 'lucide-react';
+import { Save, Building2, MapPin, Phone, Mail, Clock, Shield, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,11 +10,14 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const PharmacyProfilePage = () => {
   const { pharmacy } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
 
   const [form, setForm] = useState({
     name: '',
@@ -260,6 +263,52 @@ const PharmacyProfilePage = () => {
             </div>
           </CardContent>
         )}
+      </Card>
+
+      {/* Change Password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <Lock className="w-4 h-4 text-primary" />
+            Change Password
+          </CardTitle>
+          <CardDescription>Update your account password</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="currentPassword">Current Password</Label>
+            <Input id="currentPassword" type="password" value={passwordForm.current} onChange={(e) => setPasswordForm(p => ({ ...p, current: e.target.value }))} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="newPassword">New Password</Label>
+            <Input id="newPassword" type="password" value={passwordForm.newPass} onChange={(e) => setPasswordForm(p => ({ ...p, newPass: e.target.value }))} />
+            <PasswordStrengthMeter password={passwordForm.newPass} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmNewPassword">Confirm New Password</Label>
+            <Input id="confirmNewPassword" type="password" value={passwordForm.confirm} onChange={(e) => setPasswordForm(p => ({ ...p, confirm: e.target.value }))} />
+          </div>
+          <Button
+            variant="outline"
+            disabled={isChangingPassword || !passwordForm.current || !passwordForm.newPass}
+            onClick={async () => {
+              if (passwordForm.newPass !== passwordForm.confirm) { toast({ title: 'Error', description: "Passwords don't match" }); return; }
+              if (!isPasswordValid(passwordForm.newPass)) { toast({ title: 'Error', description: 'Password does not meet all requirements' }); return; }
+              try {
+                setIsChangingPassword(true);
+                await api.put('/api/auth/change-password', { current_password: passwordForm.current, new_password: passwordForm.newPass });
+                toast({ title: 'Password changed', description: 'Your password has been updated successfully.' });
+                setPasswordForm({ current: '', newPass: '', confirm: '' });
+              } catch (error: any) {
+                toast({ title: 'Error', description: error.response?.data?.error || 'Failed to change password.' });
+              } finally {
+                setIsChangingPassword(false);
+              }
+            }}
+          >
+            {isChangingPassword ? 'Changing...' : 'Change Password'}
+          </Button>
+        </CardContent>
       </Card>
 
       {/* Account Status */}

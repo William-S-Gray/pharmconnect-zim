@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Pill, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const PharmacyRegisterPage = () => {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ const PharmacyRegisterPage = () => {
     e.preventDefault();
     if (!form.agreedToTerms) { toast.error('You must agree to the terms'); return; }
     if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+    if (!isPasswordValid(form.password)) { toast.error('Password does not meet all requirements'); return; }
 
     try {
       setIsLoading(true);
@@ -104,7 +105,11 @@ const PharmacyRegisterPage = () => {
             <div><Label htmlFor="mcaz">MCAZ Licence Number</Label><Input id="mcaz" value={form.mcazLicense} onChange={e => setForm({...form, mcazLicense: e.target.value})} placeholder="Optional but recommended" className="h-11" /></div>
 
             <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2 text-emboss">Account</h3>
-            <div><Label htmlFor="password">Password *</Label><Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" /></div>
+            <div>
+              <Label htmlFor="password">Password *</Label>
+              <Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" />
+              <PasswordStrengthMeter password={form.password} />
+            </div>
             <div><Label htmlFor="confirmPassword">Confirm Password *</Label><Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} required className="h-11" /></div>
 
             <div className="flex items-start gap-2 pt-1">
