@@ -142,6 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     setPharmacy(null);
     rateLimiter.clearAll();
+    clearCsrfToken();
   }, []);
 
   return (
