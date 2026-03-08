@@ -112,7 +112,7 @@ const AdminApprovalsPage = () => {
         <div className="py-8"><LoadingSpinner size="lg" label="Loading pharmacies..." /></div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((p) => (
+          {pagination.paginatedItems.map((p) => (
             <Card key={p.id}>
               <CardContent className="p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -153,6 +153,15 @@ const AdminApprovalsPage = () => {
           {filtered.length === 0 && (
             <Card><CardContent className="p-8 text-center text-muted-foreground">No pharmacies match your filter.</CardContent></Card>
           )}
+          <PaginationControls
+            page={pagination.page} totalPages={pagination.totalPages}
+            canPrev={pagination.canPrev} canNext={pagination.canNext}
+            onPrev={pagination.prevPage} onNext={pagination.nextPage}
+            onPageChange={pagination.setPage}
+            startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       )}
 
