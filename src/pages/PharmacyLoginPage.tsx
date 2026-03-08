@@ -21,6 +21,29 @@ const PharmacyLoginPage = () => {
   const [totpCode, setTotpCode] = useState('');
   const [tempToken, setTempToken] = useState('');
 
+  // Forgot password state
+  const [showForgot, setShowForgot] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!forgotEmail) return;
+    try {
+      setForgotLoading(true);
+      await api.post('/api/auth/forgot-password', { email: forgotEmail });
+      setForgotSent(true);
+      toast.success('If that email is registered, a reset link has been sent.');
+    } catch {
+      // Always show success to prevent email enumeration
+      setForgotSent(true);
+      toast.success('If that email is registered, a reset link has been sent.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
