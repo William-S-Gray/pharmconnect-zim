@@ -194,7 +194,8 @@ const PharmacyLoginPage = () => {
                     autoFocus
                   />
                 </div>
-                <Button type="submit" className="w-full h-11" disabled={forgotLoading}>
+                <MathCaptcha onVerified={setCaptchaVerified} />
+                <Button type="submit" className="w-full h-11" disabled={forgotLoading || !captchaVerified}>
                   {forgotLoading ? 'Sending...' : 'Send Reset Link'}
                 </Button>
                 <Button
