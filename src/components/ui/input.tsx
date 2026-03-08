@@ -13,7 +13,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         style={{
           boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.07), inset 0 1px 2px rgba(0,0,0,0.05)',
-          background: 'linear-gradient(180deg, hsl(210 25% 93%) 0%, hsl(210 25% 95%) 100%)',
+          background: 'linear-gradient(180deg, hsl(0 0% 99%) 0%, hsl(210 20% 97%) 100%)',
         }}
         ref={ref}
         {...props}
