@@ -9,6 +9,8 @@ import { SearchX } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { StockStatus } from '@/lib/mockData';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 interface SearchResult {
   pharmacy_id: string;
@@ -62,6 +64,8 @@ const SearchResultsPage = () => {
     return (statusOrder[a.stock_status] ?? 2) - (statusOrder[b.stock_status] ?? 2);
   });
 
+  const pagination = usePagination(sorted, { defaultPageSize: 10 });
+
   const handleSearch = (query: string) => {
     setSearchParams({ drug: query, city: cityParam });
   };
@@ -110,7 +114,7 @@ const SearchResultsPage = () => {
               />
             ) : (
               <div className="space-y-3">
-                {sorted.map((result) => (
+                {pagination.paginatedItems.map((result) => (
                   <PharmacyResultCard
                     key={result.pharmacy_id}
                     pharmacyName={result.pharmacy_name}
@@ -124,6 +128,14 @@ const SearchResultsPage = () => {
                     isOpenNow={true}
                   />
                 ))}
+                <PaginationControls
+                  page={pagination.page} totalPages={pagination.totalPages}
+                  canPrev={pagination.canPrev} canNext={pagination.canNext}
+                  onPrev={pagination.prevPage} onNext={pagination.nextPage}
+                  onPageChange={pagination.setPage}
+                  startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+                  totalItems={pagination.totalItems}
+                />
               </div>
             )}
           </div>

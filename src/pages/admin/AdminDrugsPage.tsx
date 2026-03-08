@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 interface Drug {
   id: string;
@@ -91,6 +93,8 @@ const AdminDrugsPage = () => {
     return !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
   });
 
+  const pagination = usePagination(filtered, { defaultPageSize: 20 });
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -132,8 +136,8 @@ const AdminDrugsPage = () => {
                     <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {filtered.map((d) => (
+              <tbody>
+                  {pagination.paginatedItems.map((d) => (
                     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                       <td className="p-3 font-medium text-foreground">{d.name}</td>
                       <td className="p-3 text-muted-foreground">{d.generic_name}</td>
@@ -151,6 +155,18 @@ const AdminDrugsPage = () => {
                 </tbody>
               </table>
               {filtered.length === 0 && <p className="p-8 text-center text-muted-foreground">No drugs found.</p>}
+            </div>
+            <div className="px-3 pb-3">
+              <PaginationControls
+                page={pagination.page} totalPages={pagination.totalPages}
+                canPrev={pagination.canPrev} canNext={pagination.canNext}
+                onPrev={pagination.prevPage} onNext={pagination.nextPage}
+                onPageChange={pagination.setPage}
+                startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+                totalItems={pagination.totalItems}
+                pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
+                pageSizeOptions={[10, 20, 50, 100]}
+              />
             </div>
           </CardContent>
         </Card>

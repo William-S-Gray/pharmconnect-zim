@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 interface PharmacyUser {
   id: string;
@@ -69,6 +71,8 @@ const AdminUsersPage = () => {
     return !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
   });
 
+  const pagination = usePagination(filtered, { defaultPageSize: 10 });
+
   const statusBadge = (status: string) => {
     switch (status) {
       case 'APPROVED': return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-xs">Active</Badge>;
@@ -119,7 +123,7 @@ const AdminUsersPage = () => {
         <div className="py-8"><LoadingSpinner size="lg" label="Loading users..." /></div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((u) => (
+          {pagination.paginatedItems.map((u) => (
             <Card key={u.id}>
               <CardContent className="p-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -161,6 +165,15 @@ const AdminUsersPage = () => {
           {filtered.length === 0 && (
             <Card><CardContent className="p-8 text-center text-muted-foreground">No users match your filter.</CardContent></Card>
           )}
+          <PaginationControls
+            page={pagination.page} totalPages={pagination.totalPages}
+            canPrev={pagination.canPrev} canNext={pagination.canNext}
+            onPrev={pagination.prevPage} onNext={pagination.nextPage}
+            onPageChange={pagination.setPage}
+            startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+            totalItems={pagination.totalItems}
+            pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
+          />
         </div>
       )}
 
