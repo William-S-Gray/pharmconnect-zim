@@ -10,6 +10,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const PharmacyProfilePage = () => {
   const { pharmacy } = useAuth();
