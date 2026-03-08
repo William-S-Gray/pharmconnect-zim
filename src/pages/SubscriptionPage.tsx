@@ -64,11 +64,7 @@ const SubscriptionPage = () => {
             <div
               key={plan.name}
               className="card-pharma relative overflow-hidden"
-              style={plan.popular ? {
-                background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(174 30% 95%) 100%)',
-                borderColor: 'hsl(174 80% 35%)',
-                boxShadow: '0 1px 0 0 rgba(255,255,255,0.9) inset, 0 -1px 0 0 rgba(0,0,0,0.04) inset, 0 4px 20px hsl(174 80% 35% / 0.15), 0 2px 8px rgba(0,0,0,0.06)',
-              } : {}}
+            className={`card-pharma relative overflow-hidden ${plan.popular ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''}`}
             >
               {plan.popular && (
                 <span
