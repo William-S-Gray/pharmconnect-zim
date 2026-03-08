@@ -2,6 +2,7 @@ import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -24,13 +25,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex">
       {/* Sidebar */}
-      <aside
-        className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40"
-        style={{
-          background: 'linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 20% 92%) 100%)',
-          boxShadow: '1px 0 0 0 rgba(255,255,255,0.5) inset, 2px 0 12px rgba(0,0,0,0.06)',
-        }}
-      >
+      <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
         <div className="p-4 border-b border-border">
           <Link to="/" className="flex items-center gap-2">
             <div
@@ -48,7 +43,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
 
         <div className="px-3 py-4">
           <div className="card-pharma mb-4 p-3">
-            <p className="font-heading font-semibold text-sm truncate text-emboss">{pharmacy?.name || 'Pharmacy'}</p>
+            <p className="font-heading font-semibold text-sm truncate text-foreground">{pharmacy?.name || 'Pharmacy'}</p>
             <span className="badge-approved text-[10px] mt-1">{pharmacy?.status || 'PENDING'}</span>
           </div>
         </div>
@@ -64,7 +59,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
                   'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150',
                   isActive
                     ? 'font-medium text-primary-foreground btn-skeu-primary'
-                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss'
+                    : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
                 )}
               >
                 <item.icon className="w-4 h-4" />
@@ -74,24 +69,19 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
           })}
         </nav>
 
-        <div className="p-3 border-t border-border">
+        <div className="p-3 border-t border-border flex items-center justify-between">
           <button
             onClick={handleLogout}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground text-emboss transition-colors w-full"
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
           >
             <LogOut className="w-4 h-4" /> Logout
           </button>
+          <ThemeToggle />
         </div>
       </aside>
 
       {/* Mobile bottom nav */}
-      <nav
-        className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border"
-        style={{
-          background: 'linear-gradient(180deg, hsl(0 0% 99%) 0%, hsl(210 20% 94%) 100%)',
-          boxShadow: '0 -1px 0 0 rgba(255,255,255,0.8) inset, 0 -4px 12px rgba(0,0,0,0.06)',
-        }}
-      >
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border mobile-nav-skeu">
         {navItems.slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path;
           return (

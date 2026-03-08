@@ -48,7 +48,7 @@ const PharmacyDashboard = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">
+        <h1 className="font-heading font-bold text-2xl text-foreground">
           {greeting}, {pharmacy?.name || 'Pharmacy'} 👋
         </h1>
         <div className="flex items-center gap-2 mt-1">
@@ -64,19 +64,12 @@ const PharmacyDashboard = () => {
         {statCards.map((stat) => (
           <div key={stat.label} className="stat-card">
             <div className="flex items-center gap-2">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center"
-                style={{
-                  background: 'linear-gradient(180deg, hsl(210 20% 96%) 0%, hsl(210 20% 90%) 100%)',
-                  boxShadow: 'inset 0 -1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06)',
-                  border: '1px solid hsl(214 20% 85%)',
-                }}
-              >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center stat-icon-skeu">
                 <stat.icon className={`w-3.5 h-3.5 ${stat.color}`} />
               </div>
               <span className="text-xs text-muted-foreground">{stat.label}</span>
             </div>
-            <span className="font-heading font-bold text-2xl text-foreground text-emboss">{stat.value}</span>
+            <span className="font-heading font-bold text-2xl text-foreground">{stat.value}</span>
           </div>
         ))}
       </div>
@@ -85,7 +78,7 @@ const PharmacyDashboard = () => {
         {/* Low stock / recent alerts */}
         <div className="card-pharma">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading font-semibold text-foreground text-emboss">Low Stock Alerts</h2>
+            <h2 className="font-heading font-semibold text-foreground">Low Stock Alerts</h2>
             <Link to="/dashboard/stock" className="text-sm text-primary hover:underline">View all</Link>
           </div>
           <div className="space-y-3">
@@ -109,7 +102,7 @@ const PharmacyDashboard = () => {
         {/* Top searches */}
         <div className="card-pharma">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-heading font-semibold text-foreground text-emboss">Trending Searches</h2>
+            <h2 className="font-heading font-semibold text-foreground">Trending Searches</h2>
             <TrendingUp className="w-4 h-4 text-muted-foreground" />
           </div>
           <div className="space-y-3">
@@ -119,15 +112,7 @@ const PharmacyDashboard = () => {
             {topSearches.slice(0, 5).map((item: any, i: number) => (
               <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div className="flex items-center gap-3">
-                  <span
-                    className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center"
-                    style={{
-                      background: 'linear-gradient(180deg, hsl(174 40% 94%) 0%, hsl(174 30% 86%) 100%)',
-                      boxShadow: 'inset 0 -1px 2px rgba(0,0,0,0.04), 0 1px 2px rgba(0,0,0,0.06)',
-                      border: '1px solid hsl(174 20% 82%)',
-                      color: 'hsl(174 100% 24%)',
-                    }}
-                  >
+                  <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center rank-badge-skeu">
                     {i + 1}
                   </span>
                   <span className="font-mono-drug text-sm font-medium text-foreground">
@@ -142,17 +127,10 @@ const PharmacyDashboard = () => {
       </div>
 
       {/* Upgrade banner */}
-      <div
-        className="rounded-xl p-5 border"
-        style={{
-          background: 'linear-gradient(180deg, hsl(174 50% 95%) 0%, hsl(174 40% 90%) 100%)',
-          borderColor: 'hsl(174 30% 80%)',
-          boxShadow: '0 1px 0 0 rgba(255,255,255,0.7) inset, 0 2px 8px rgba(0,0,0,0.06)',
-        }}
-      >
+      <div className="rounded-xl p-5 border upgrade-banner-skeu">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h3 className="font-heading font-semibold text-foreground text-emboss">
+            <h3 className="font-heading font-semibold text-foreground">
               You were searched {stats?.searches_this_month || 0} times this month
             </h3>
             <p className="text-sm text-muted-foreground">Upgrade to see who searched and when — from $29/month</p>

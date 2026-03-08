@@ -71,17 +71,10 @@ const Index = () => {
         <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
           {steps.map((step, i) => (
             <div key={i} className="text-center card-pharma p-6">
-              <div
-                className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
-                style={{
-                  background: 'linear-gradient(180deg, hsl(174 40% 94%) 0%, hsl(174 30% 88%) 100%)',
-                  boxShadow: 'inset 0 -2px 4px rgba(0,0,0,0.05), 0 2px 6px rgba(0,0,0,0.08)',
-                  border: '1px solid hsl(174 20% 82%)',
-                }}
-              >
+              <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 stat-icon-skeu">
                 <step.icon className="w-6 h-6 text-primary" />
               </div>
-              <h3 className="font-heading font-semibold text-lg text-foreground mb-2 text-emboss">{step.title}</h3>
+              <h3 className="font-heading font-semibold text-lg text-foreground mb-2">{step.title}</h3>
               <p className="text-sm text-muted-foreground">{step.description}</p>
             </div>
           ))}
