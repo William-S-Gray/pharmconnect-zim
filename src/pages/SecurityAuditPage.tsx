@@ -398,6 +398,9 @@ const SecurityAuditPage = () => {
         </CardContent>
       </Card>
 
+      {/* Login Email Alerts */}
+      <LoginAlertSettings />
+
       {/* 2FA Setup Dialog */}
       <Dialog open={show2FASetup} onOpenChange={setShow2FASetup}>
         <DialogContent className="sm:max-w-md">
