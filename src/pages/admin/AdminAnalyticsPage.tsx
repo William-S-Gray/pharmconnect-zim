@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 
 interface AnalyticsData {
   summary: { label: string; value: string }[];
