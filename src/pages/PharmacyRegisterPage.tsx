@@ -40,8 +40,18 @@ const PharmacyRegisterPage = () => {
       toast.success('Registration received! Our team will verify your pharmacy within 24 hours.');
       navigate('/pharmacy/login');
     } catch (error: any) {
-      const message = error.response?.data?.error || 'Registration failed. Please try again.';
-      toast.error(message);
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
+        toast.error('Unable to connect to the server. Please check your internet connection and try again.');
+      } else {
+        const serverMsg = error.response?.data?.error || '';
+        if (serverMsg.toLowerCase().includes('mcaz') || serverMsg.toLowerCase().includes('licence') || serverMsg.toLowerCase().includes('license') || serverMsg.toLowerCase().includes('duplicate')) {
+          toast.error('This MCAZ Licence Number is already registered. Please check your licence number or contact support if you believe this is an error.');
+        } else if (serverMsg.toLowerCase().includes('email')) {
+          toast.error('This email address is already registered. Try signing in instead.');
+        } else {
+          toast.error(serverMsg || 'Registration failed. Please try again later.');
+        }
+      }
     } finally {
       setIsLoading(false);
     }
