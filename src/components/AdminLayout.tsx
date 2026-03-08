@@ -10,6 +10,7 @@ const adminNavItems = [
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Users', icon: Users, path: '/admin/users' },
+  { label: 'Settings', icon: Settings, path: '/admin/profile' },
 ];
 
 export function AdminLayout() {
