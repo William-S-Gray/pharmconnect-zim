@@ -27,10 +27,14 @@ const PharmacyLoginPage = () => {
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
+  const [captchaVerified, setCaptchaVerified] = useState(false);
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!forgotEmail) return;
+    if (!forgotEmail || !captchaVerified) {
+      if (!captchaVerified) toast.error('Please solve the security check first');
+      return;
+    }
     try {
       setForgotLoading(true);
       await api.post('/api/auth/forgot-password', { email: forgotEmail });
