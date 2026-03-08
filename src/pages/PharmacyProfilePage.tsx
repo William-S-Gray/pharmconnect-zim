@@ -16,6 +16,8 @@ const PharmacyProfilePage = () => {
   const { pharmacy } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ current: '', newPass: '', confirm: '' });
 
   const [form, setForm] = useState({
     name: '',
