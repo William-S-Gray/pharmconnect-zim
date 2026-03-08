@@ -105,7 +105,11 @@ const PharmacyRegisterPage = () => {
             <div><Label htmlFor="mcaz">MCAZ Licence Number</Label><Input id="mcaz" value={form.mcazLicense} onChange={e => setForm({...form, mcazLicense: e.target.value})} placeholder="Optional but recommended" className="h-11" /></div>
 
             <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2 text-emboss">Account</h3>
-            <div><Label htmlFor="password">Password *</Label><Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" /></div>
+            <div>
+              <Label htmlFor="password">Password *</Label>
+              <Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" />
+              <PasswordStrengthMeter password={form.password} />
+            </div>
             <div><Label htmlFor="confirmPassword">Confirm Password *</Label><Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} required className="h-11" /></div>
 
             <div className="flex items-start gap-2 pt-1">
