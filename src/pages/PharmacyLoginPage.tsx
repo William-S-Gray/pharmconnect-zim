@@ -86,7 +86,10 @@ const PharmacyLoginPage = () => {
       resetLockout(email);
       setFailedAttempts(0);
       toast.success('Welcome back!');
-      navigate('/dashboard');
+      // Check stored pharmacy for admin role to determine redirect
+      const stored = localStorage.getItem('pharmtrack_pharmacy');
+      const role = stored ? JSON.parse(stored)?.role : null;
+      navigate(role === 'admin' ? '/admin' : '/dashboard');
     } catch (error: any) {
       // Check if server requires 2FA
       if (error.response?.status === 403 && error.response?.data?.requires_2fa) {
