@@ -192,10 +192,7 @@ const AlertSettingsPage = () => {
           <CardContent>
             <div className="skeu-inset p-1 space-y-0">
               <div
-                className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md"
-                style={{
-                  background: 'linear-gradient(180deg, hsl(210 20% 94%) 0%, hsl(210 20% 90%) 100%)',
-                }}
+                className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md bg-muted"
               >
                 <span className="text-emboss">Drug</span>
                 <span className="text-emboss">Threshold</span>
@@ -205,8 +202,7 @@ const AlertSettingsPage = () => {
               {drugThresholds.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30"
-                  style={{ background: 'hsl(0 0% 99%)' }}
+                  className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30 bg-card"
                 >
                   <span className="font-mono text-sm font-medium text-foreground">{item.drug}</span>
 

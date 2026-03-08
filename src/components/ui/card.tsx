@@ -6,13 +6,9 @@ const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElemen
   <div
     ref={ref}
     className={cn(
-      "rounded-xl border border-border text-card-foreground",
+      "rounded-xl border border-border text-card-foreground card-pharma",
       className,
     )}
-    style={{
-      background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 97%) 100%)',
-      boxShadow: '0 1px 0 0 rgba(255,255,255,0.8) inset, 0 -1px 0 0 rgba(0,0,0,0.04) inset, 0 2px 8px rgba(0,0,0,0.08), 0 6px 20px rgba(0,0,0,0.05)',
-    }}
     {...props}
   />
 ));

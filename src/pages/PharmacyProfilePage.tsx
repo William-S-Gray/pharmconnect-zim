@@ -230,8 +230,7 @@ const PharmacyProfilePage = () => {
                 return (
                   <div
                     key={day}
-                    className="grid grid-cols-[100px_1fr] sm:grid-cols-[120px_100px_100px_80px] gap-3 items-center py-2.5 px-3 border-b border-border last:border-0"
-                    style={{ background: 'hsl(0 0% 99%)' }}
+                    className="grid grid-cols-[100px_1fr] sm:grid-cols-[120px_100px_100px_80px] gap-3 items-center py-2.5 px-3 border-b border-border last:border-0 bg-card"
                   >
                     <span className="text-sm font-medium capitalize text-foreground text-emboss">{day}</span>
                     {h.closed ? (
