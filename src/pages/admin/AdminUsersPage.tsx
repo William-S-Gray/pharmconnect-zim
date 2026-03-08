@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Search, MapPin, Ban, CheckCircle, CreditCard } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Search, MapPin, Ban, CheckCircle, CreditCard, Plus, Eye, Pencil, Trash2, UserPlus } from 'lucide-react';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
@@ -29,11 +30,42 @@ interface PharmacyUser {
   joined: string;
 }
 
+type UserFormData = {
+  name: string;
+  email: string;
+  phone: string;
+  city: string;
+  suburb: string;
+  status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
+  plan_tier: 'FREE' | 'BASIC' | 'PRO';
+  password?: string;
+};
+
+const emptyForm: UserFormData = {
+  name: '',
+  email: '',
+  phone: '',
+  city: 'Harare',
+  suburb: '',
+  status: 'PENDING',
+  plan_tier: 'FREE',
+  password: '',
+};
+
+const cities = ['Harare', 'Bulawayo', 'Mutare', 'Gweru'];
+
 const AdminUsersPage = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [planFilter, setPlanFilter] = useState('ALL');
+
+  // CRUD dialogs
+  const [viewUser, setViewUser] = useState<PharmacyUser | null>(null);
+  const [editUser, setEditUser] = useState<PharmacyUser | null>(null);
+  const [deleteUser, setDeleteUser] = useState<PharmacyUser | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [formData, setFormData] = useState<UserFormData>(emptyForm);
   const [changePlanUser, setChangePlanUser] = useState<PharmacyUser | null>(null);
   const [newPlan, setNewPlan] = useState('');
 
@@ -69,9 +101,41 @@ const AdminUsersPage = () => {
     onError: () => toast.error('Failed to change plan'),
   });
 
-  const filtered = users.filter(u => {
-    return !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
+  const createMutation = useMutation({
+    mutationFn: (data: UserFormData) => api.post('/api/admin/users', data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success('User created successfully');
+      setShowCreate(false);
+      setFormData(emptyForm);
+    },
+    onError: () => toast.error('Failed to create user'),
   });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: Partial<UserFormData> }) =>
+      api.put(`/api/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success('User updated successfully');
+      setEditUser(null);
+    },
+    onError: () => toast.error('Failed to update user'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/users/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success('User deleted successfully');
+      setDeleteUser(null);
+    },
+    onError: () => toast.error('Failed to delete user'),
+  });
+
+  const filtered = users.filter(u =>
+    !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
+  );
 
   const pagination = usePagination(filtered, { defaultPageSize: 10 });
 
@@ -89,18 +153,99 @@ const AdminUsersPage = () => {
     return <Badge variant="outline" className={`${colors[plan] || ''} text-xs`}>{plan}</Badge>;
   };
 
+  const openEdit = (u: PharmacyUser) => {
+    setEditUser(u);
+    setFormData({ name: u.name, email: u.email, phone: u.phone, city: u.city, suburb: u.suburb, status: u.status, plan_tier: u.plan_tier });
+  };
+
+  const openCreate = () => {
+    setFormData(emptyForm);
+    setShowCreate(true);
+  };
+
+  const UserFormFields = ({ isCreate }: { isCreate: boolean }) => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Pharmacy Name</Label>
+          <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. HealthPlus Pharmacy" />
+        </div>
+        <div className="space-y-2">
+          <Label>Email</Label>
+          <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="pharmacy@example.com" />
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Phone</Label>
+          <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0771 234 567" />
+        </div>
+        <div className="space-y-2">
+          <Label>City</Label>
+          <Select value={formData.city} onValueChange={(v) => setFormData({ ...formData, city: v })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Suburb</Label>
+          <Input value={formData.suburb} onChange={(e) => setFormData({ ...formData, suburb: e.target.value })} placeholder="e.g. Avondale" />
+        </div>
+        <div className="space-y-2">
+          <Label>Status</Label>
+          <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as UserFormData['status'] })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="APPROVED">Approved</SelectItem>
+              <SelectItem value="SUSPENDED">Suspended</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Plan Tier</Label>
+          <Select value={formData.plan_tier} onValueChange={(v) => setFormData({ ...formData, plan_tier: v as UserFormData['plan_tier'] })}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="FREE">Free</SelectItem>
+              <SelectItem value="BASIC">Basic — $29/mo</SelectItem>
+              <SelectItem value="PRO">Pro — $79/mo</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {isCreate && (
+          <div className="space-y-2">
+            <Label>Password</Label>
+            <Input type="password" value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder="Min 8 characters" />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">User Management</h1>
           <p className="text-muted-foreground text-sm">{users.length} registered pharmacies</p>
         </div>
-        <ExportDropdown
-          disabled={!filtered.length}
-          onCSV={() => exportCSV(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list')}
-          onExcel={() => exportExcel(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list', 'Users')}
-        />
+        <div className="flex gap-2">
+          <Button onClick={openCreate}>
+            <UserPlus className="w-4 h-4 mr-1.5" /> Add User
+          </Button>
+          <ExportDropdown
+            disabled={!filtered.length}
+            onCSV={() => exportCSV(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list')}
+            onExcel={() => exportExcel(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list', 'Users')}
+          />
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -149,7 +294,16 @@ const AdminUsersPage = () => {
                       <span>Joined {new Date(u.joined).toLocaleDateString()}</span>
                     </div>
                   </div>
-                  <div className="flex gap-2 shrink-0">
+                  <div className="flex gap-1.5 shrink-0 flex-wrap">
+                    <Button size="sm" variant="ghost" onClick={() => setViewUser(u)} title="View">
+                      <Eye className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => openEdit(u)} title="Edit">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleteUser(u)} title="Delete" className="text-destructive hover:text-destructive">
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
                     <Button size="sm" variant="outline" onClick={() => { setChangePlanUser(u); setNewPlan(u.plan_tier); }}>
                       <CreditCard className="w-3.5 h-3.5 mr-1" /> Plan
                     </Button>
@@ -158,10 +312,7 @@ const AdminUsersPage = () => {
                         size="sm"
                         variant={u.status === 'SUSPENDED' ? 'default' : 'destructive'}
                         disabled={toggleStatusMutation.isPending}
-                        onClick={() => toggleStatusMutation.mutate({
-                          id: u.id,
-                          status: u.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED',
-                        })}
+                        onClick={() => toggleStatusMutation.mutate({ id: u.id, status: u.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED' })}
                       >
                         {u.status === 'SUSPENDED' ? <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Reactivate</> : <><Ban className="w-3.5 h-3.5 mr-1" /> Suspend</>}
                       </Button>
@@ -185,6 +336,103 @@ const AdminUsersPage = () => {
           />
         </div>
       )}
+
+      {/* View User Dialog */}
+      <Dialog open={!!viewUser} onOpenChange={() => setViewUser(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>User Details</DialogTitle>
+            <DialogDescription>Full information for this pharmacy account</DialogDescription>
+          </DialogHeader>
+          {viewUser && (
+            <div className="space-y-3 text-sm">
+              <div className="grid grid-cols-[120px_1fr] gap-y-2.5">
+                <span className="text-muted-foreground">Name</span>
+                <span className="font-medium text-foreground">{viewUser.name}</span>
+                <span className="text-muted-foreground">Email</span>
+                <span className="text-foreground">{viewUser.email}</span>
+                <span className="text-muted-foreground">Phone</span>
+                <span className="text-foreground">{viewUser.phone || '—'}</span>
+                <span className="text-muted-foreground">City</span>
+                <span className="text-foreground">{viewUser.city}</span>
+                <span className="text-muted-foreground">Suburb</span>
+                <span className="text-foreground">{viewUser.suburb || '—'}</span>
+                <span className="text-muted-foreground">Status</span>
+                <span>{statusBadge(viewUser.status)}</span>
+                <span className="text-muted-foreground">Plan</span>
+                <span>{planBadge(viewUser.plan_tier)}</span>
+                <span className="text-muted-foreground">Drugs Listed</span>
+                <span className="text-foreground">{viewUser.drug_count}</span>
+                <span className="text-muted-foreground">Joined</span>
+                <span className="text-foreground">{new Date(viewUser.joined).toLocaleDateString()}</span>
+                <span className="text-muted-foreground">ID</span>
+                <span className="font-mono text-xs text-muted-foreground">{viewUser.id}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewUser(null)}>Close</Button>
+            <Button onClick={() => { if (viewUser) openEdit(viewUser); setViewUser(null); }}>
+              <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create User Dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Create New User</DialogTitle>
+            <DialogDescription>Add a new pharmacy account to the system</DialogDescription>
+          </DialogHeader>
+          <UserFormFields isCreate />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
+            <Button disabled={createMutation.isPending || !formData.name || !formData.email} onClick={() => createMutation.mutate(formData)}>
+              {createMutation.isPending ? 'Creating...' : 'Create User'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit User Dialog */}
+      <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5" /> Edit User</DialogTitle>
+            <DialogDescription>Update pharmacy account details</DialogDescription>
+          </DialogHeader>
+          <UserFormFields isCreate={false} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
+            <Button disabled={updateMutation.isPending || !formData.name || !formData.email} onClick={() => editUser && updateMutation.mutate({ id: editUser.id, data: formData })}>
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteUser} onOpenChange={() => setDeleteUser(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete User</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete <strong>{deleteUser?.name}</strong> ({deleteUser?.email})? This action cannot be undone and will remove all associated stock data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteUser && deleteMutation.mutate(deleteUser.id)}
+            >
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Change Plan Dialog */}
       <Dialog open={!!changePlanUser} onOpenChange={() => setChangePlanUser(null)}>
