@@ -167,7 +167,7 @@ const PharmacyLoginPage = () => {
                 <Button
                   variant="outline"
                   className="w-full h-11"
-                  onClick={() => { setForgotSent(false); setForgotEmail(''); }}
+                  onClick={() => { setForgotSent(false); setForgotEmail(''); setCaptchaVerified(false); }}
                 >
                   Try another email
                 </Button>
