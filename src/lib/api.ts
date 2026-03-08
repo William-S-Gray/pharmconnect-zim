@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { rateLimiter } from './rateLimiter';
 import { getDeduplicationKey, getInflight, setInflight } from './requestDedup';
+import { getCsrfToken, isMutationMethod, CSRF_HEADER } from './csrfToken';
 import { toast } from 'sonner';
 
 const api = axios.create({
