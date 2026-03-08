@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -9,6 +9,9 @@ import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 interface PendingPharmacy {
   id: string;
@@ -22,16 +25,8 @@ interface PendingPharmacy {
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
 }
 
-const mockPending: PendingPharmacy[] = [
-  { id: 'p1', name: 'MedZim Pharmacy', email: 'medzim@email.co.zw', phone: '0771 111 222', city: 'Bulawayo', suburb: 'City Centre', mcaz_license: 'MCAZ-2024-001', submitted_at: '2026-03-07T10:30:00Z', status: 'PENDING' },
-  { id: 'p2', name: 'Sunrise Health Pharmacy', email: 'sunrise@email.co.zw', phone: '0772 333 444', city: 'Harare', suburb: 'Borrowdale', mcaz_license: 'MCAZ-2024-002', submitted_at: '2026-03-06T14:15:00Z', status: 'PENDING' },
-  { id: 'p3', name: 'ZimCare Pharmacy', email: 'zimcare@email.co.zw', phone: '0773 555 666', city: 'Mutare', suburb: 'Main Street', mcaz_license: 'MCAZ-2024-003', submitted_at: '2026-03-05T09:00:00Z', status: 'PENDING' },
-  { id: 'p4', name: 'QuickMeds Pharmacy', email: 'quickmeds@email.co.zw', phone: '0774 777 888', city: 'Gweru', suburb: 'Mkoba', mcaz_license: '', submitted_at: '2026-03-04T16:45:00Z', status: 'PENDING' },
-  { id: 'p5', name: 'CareWell Pharmacy', email: 'carewell@email.co.zw', phone: '0775 999 000', city: 'Harare', suburb: 'Avondale', mcaz_license: 'MCAZ-2024-005', submitted_at: '2026-03-03T11:20:00Z', status: 'APPROVED' },
-];
-
 const AdminApprovalsPage = () => {
-  const [pharmacies, setPharmacies] = useState(mockPending);
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<string>('ALL');
   const [search, setSearch] = useState('');
   const [selectedPharmacy, setSelectedPharmacy] = useState<PendingPharmacy | null>(null);
@@ -39,24 +34,42 @@ const AdminApprovalsPage = () => {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectTarget, setRejectTarget] = useState<string | null>(null);
 
-  const handleApprove = (id: string) => {
-    setPharmacies(prev => prev.map(p => p.id === id ? { ...p, status: 'APPROVED' as const } : p));
-    toast.success('Pharmacy approved successfully');
-  };
+  const { data: pharmacies = [], isLoading } = useQuery<PendingPharmacy[]>({
+    queryKey: ['admin', 'pharmacies', filter],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (filter !== 'ALL') params.status = filter;
+      const res = await api.get('/api/admin/pharmacies', { params });
+      return res.data;
+    },
+  });
 
-  const handleReject = () => {
-    if (!rejectTarget) return;
-    setPharmacies(prev => prev.map(p => p.id === rejectTarget ? { ...p, status: 'SUSPENDED' as const } : p));
-    toast.success('Pharmacy rejected');
-    setShowRejectDialog(false);
-    setRejectReason('');
-    setRejectTarget(null);
-  };
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => api.put(`/api/admin/pharmacies/${id}/approve`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+      toast.success('Pharmacy approved successfully');
+    },
+    onError: () => toast.error('Failed to approve pharmacy'),
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      api.put(`/api/admin/pharmacies/${id}/reject`, { reason }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+      toast.success('Pharmacy rejected');
+      setShowRejectDialog(false);
+      setRejectReason('');
+      setRejectTarget(null);
+    },
+    onError: () => toast.error('Failed to reject pharmacy'),
+  });
 
   const filtered = pharmacies.filter(p => {
-    const matchesFilter = filter === 'ALL' || p.status === filter;
-    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase());
-    return matchesFilter && matchesSearch;
+    return !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase());
   });
 
   const statusBadge = (status: string) => {
@@ -91,56 +104,58 @@ const AdminApprovalsPage = () => {
         </Select>
       </div>
 
-      <div className="space-y-3">
-        {filtered.map((p) => (
-          <Card key={p.id}>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <h3 className="font-heading font-semibold text-foreground truncate">{p.name}</h3>
-                    {statusBadge(p.status)}
+      {isLoading ? (
+        <div className="py-8"><LoadingSpinner size="lg" label="Loading pharmacies..." /></div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((p) => (
+            <Card key={p.id}>
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <h3 className="font-heading font-semibold text-foreground truncate">{p.name}</h3>
+                      {statusBadge(p.status)}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {p.suburb}, {p.city}</span>
+                      <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {p.phone}</span>
+                      <span>{p.email}</span>
+                    </div>
+                    <div className="flex gap-3 mt-1 text-xs">
+                      <span className="text-muted-foreground">MCAZ: <strong className={p.mcaz_license ? 'text-foreground' : 'text-destructive'}>{p.mcaz_license || 'Not provided'}</strong></span>
+                      <span className="text-muted-foreground">Submitted: {new Date(p.submitted_at).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {p.suburb}, {p.city}</span>
-                    <span className="flex items-center gap-1"><Phone className="w-3 h-3" /> {p.phone}</span>
-                    <span>{p.email}</span>
-                  </div>
-                  <div className="flex gap-3 mt-1 text-xs">
-                    <span className="text-muted-foreground">MCAZ: <strong className={p.mcaz_license ? 'text-foreground' : 'text-destructive'}>{p.mcaz_license || 'Not provided'}</strong></span>
-                    <span className="text-muted-foreground">Submitted: {new Date(p.submitted_at).toLocaleDateString()}</span>
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => setSelectedPharmacy(p)}>
+                      <Eye className="w-3.5 h-3.5 mr-1" /> View
+                    </Button>
+                    {p.status === 'PENDING' && (
+                      <>
+                        <Button size="sm" onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending} className="bg-green-600 hover:bg-green-700">
+                          <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => { setRejectTarget(p.id); setShowRejectDialog(true); }}>
+                          <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button size="sm" variant="outline" onClick={() => setSelectedPharmacy(p)}>
-                    <Eye className="w-3.5 h-3.5 mr-1" /> View
-                  </Button>
-                  {p.status === 'PENDING' && (
-                    <>
-                      <Button size="sm" onClick={() => handleApprove(p.id)} className="bg-green-600 hover:bg-green-700">
-                        <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => { setRejectTarget(p.id); setShowRejectDialog(true); }}>
-                        <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {filtered.length === 0 && (
-          <Card><CardContent className="p-8 text-center text-muted-foreground">No pharmacies match your filter.</CardContent></Card>
-        )}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+          {filtered.length === 0 && (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">No pharmacies match your filter.</CardContent></Card>
+          )}
+        </div>
+      )}
 
       {/* View Details Dialog */}
       <Dialog open={!!selectedPharmacy} onOpenChange={() => setSelectedPharmacy(null)}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedPharmacy?.name}</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>{selectedPharmacy?.name}</DialogTitle></DialogHeader>
           {selectedPharmacy && (
             <div className="space-y-3 text-sm">
               <div className="grid grid-cols-2 gap-3">
@@ -166,7 +181,9 @@ const AdminApprovalsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowRejectDialog(false)}>Cancel</Button>
-            <Button variant="destructive" onClick={handleReject}>Confirm Rejection</Button>
+            <Button variant="destructive" disabled={rejectMutation.isPending} onClick={() => rejectTarget && rejectMutation.mutate({ id: rejectTarget, reason: rejectReason })}>
+              {rejectMutation.isPending ? 'Rejecting...' : 'Confirm Rejection'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

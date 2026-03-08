@@ -1,25 +1,62 @@
-import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckSquare, Users, Database, BarChart3, TrendingUp, AlertTriangle } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Skeleton } from '@/components/ui/skeleton';
 
-const stats = [
-  { label: 'Pending Approvals', value: '12', icon: CheckSquare, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-  { label: 'Total Pharmacies', value: '148', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-  { label: 'Drugs in Database', value: '2,340', icon: Database, color: 'text-green-500', bg: 'bg-green-500/10' },
-  { label: 'Searches Today', value: '1,892', icon: BarChart3, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { label: 'Stock Alerts', value: '34', icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
-  { label: 'Growth (30d)', value: '+18%', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10' },
-];
+interface AdminStats {
+  pending_approvals: number;
+  total_pharmacies: number;
+  total_drugs: number;
+  searches_today: number;
+  stock_alerts: number;
+  growth_30d: number;
+}
 
-const recentActivity = [
-  { action: 'New pharmacy registration', detail: 'MedZim Pharmacy — Bulawayo', time: '5 min ago' },
-  { action: 'Stock alert triggered', detail: 'Paracetamol 500mg — low stock across 8 pharmacies', time: '12 min ago' },
-  { action: 'Pharmacy approved', detail: 'CareWell Pharmacy — Harare', time: '1 hour ago' },
-  { action: 'Drug added', detail: 'Metformin 850mg — added to master database', time: '2 hours ago' },
-  { action: 'Subscription upgrade', detail: 'ZimPharm Central upgraded to PRO', time: '3 hours ago' },
+interface ActivityItem {
+  action: string;
+  detail: string;
+  time: string;
+}
+
+const fallbackStats: AdminStats = {
+  pending_approvals: 0, total_pharmacies: 0, total_drugs: 0,
+  searches_today: 0, stock_alerts: 0, growth_30d: 0,
+};
+
+const iconMap = [
+  { key: 'pending_approvals' as const, label: 'Pending Approvals', icon: CheckSquare, color: 'text-orange-500', bg: 'bg-orange-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'total_pharmacies' as const, label: 'Total Pharmacies', icon: Users, color: 'text-primary', bg: 'bg-primary/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'total_drugs' as const, label: 'Drugs in Database', icon: Database, color: 'text-green-500', bg: 'bg-green-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'searches_today' as const, label: 'Searches Today', icon: BarChart3, color: 'text-blue-500', bg: 'bg-blue-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'stock_alerts' as const, label: 'Stock Alerts', icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'growth_30d' as const, label: 'Growth (30d)', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10', format: (v: number) => `${v > 0 ? '+' : ''}${v}%` },
 ];
 
 const AdminOverviewPage = () => {
+  const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
+    queryKey: ['admin', 'stats'],
+    queryFn: async () => {
+      const res = await api.get('/api/admin/stats');
+      return res.data;
+    },
+    retry: 1,
+    placeholderData: fallbackStats,
+  });
+
+  const { data: activity, isLoading: activityLoading } = useQuery<ActivityItem[]>({
+    queryKey: ['admin', 'activity'],
+    queryFn: async () => {
+      const res = await api.get('/api/admin/activity');
+      return res.data;
+    },
+    retry: 1,
+    placeholderData: [],
+  });
+
+  const s = stats || fallbackStats;
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
@@ -28,17 +65,25 @@ const AdminOverviewPage = () => {
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {stats.map((stat) => (
-          <Card key={stat.label}>
-            <CardContent className="p-4">
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${stat.bg} mb-2`}>
-                <stat.icon className={`w-4 h-4 ${stat.color}`} />
-              </div>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
-              <p className="text-xs text-muted-foreground">{stat.label}</p>
-            </CardContent>
-          </Card>
-        ))}
+        {iconMap.map((item) => {
+          const raw = s[item.key as keyof AdminStats];
+          const value = item.format ? item.format(raw) : raw.toLocaleString();
+          return (
+            <Card key={item.key}>
+              <CardContent className="p-4">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.bg} mb-2`}>
+                  <item.icon className={`w-4 h-4 ${item.color}`} />
+                </div>
+                {statsLoading ? (
+                  <Skeleton className="h-8 w-16" />
+                ) : (
+                  <p className="text-2xl font-bold text-foreground">{value}</p>
+                )}
+                <p className="text-xs text-muted-foreground">{item.label}</p>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       <Card>
@@ -46,17 +91,23 @@ const AdminOverviewPage = () => {
           <CardTitle className="text-lg">Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-0">
-            {recentActivity.map((item, i) => (
-              <div key={i} className="flex items-start justify-between py-3 border-b border-border last:border-0">
-                <div>
-                  <p className="text-sm font-medium text-foreground">{item.action}</p>
-                  <p className="text-xs text-muted-foreground">{item.detail}</p>
+          {activityLoading ? (
+            <div className="py-4"><LoadingSpinner label="Loading activity..." /></div>
+          ) : (activity && activity.length > 0) ? (
+            <div className="space-y-0">
+              {activity.map((item, i) => (
+                <div key={i} className="flex items-start justify-between py-3 border-b border-border last:border-0">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{item.action}</p>
+                    <p className="text-xs text-muted-foreground">{item.detail}</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-4">{item.time}</span>
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0 ml-4">{item.time}</span>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-4">No recent activity.</p>
+          )}
         </CardContent>
       </Card>
     </div>
