@@ -9,6 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Pill, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const PharmacyRegisterPage = () => {
   const navigate = useNavigate();
