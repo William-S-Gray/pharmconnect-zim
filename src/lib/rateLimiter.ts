@@ -29,6 +29,8 @@ const ENDPOINT_LIMITS: Record<string, RateLimiterConfig> = {
   '/api/auth/register': { maxRequests: 3, windowMs: 60_000, cooldownMs: 60_000 },
   '/api/alerts/test': { maxRequests: 3, windowMs: 300_000, cooldownMs: 60_000 },
   '/api/subscriptions/initiate': { maxRequests: 5, windowMs: 60_000, cooldownMs: 30_000 },
+  '/api/auth/forgot-password': { maxRequests: 3, windowMs: 300_000, cooldownMs: 60_000 },
+  '/api/auth/reset-password': { maxRequests: 5, windowMs: 300_000, cooldownMs: 60_000 },
 };
 
 class RateLimiter {
