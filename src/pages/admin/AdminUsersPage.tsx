@@ -163,7 +163,7 @@ const AdminUsersPage = () => {
     setShowCreate(true);
   };
 
-  const UserFormFields = ({ isCreate }: { isCreate: boolean }) => (
+  const renderFormFields = (isCreate: boolean) => (
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
@@ -386,7 +386,7 @@ const AdminUsersPage = () => {
             <DialogTitle className="flex items-center gap-2"><Plus className="w-5 h-5" /> Create New User</DialogTitle>
             <DialogDescription>Add a new pharmacy account to the system</DialogDescription>
           </DialogHeader>
-          <UserFormFields isCreate />
+          {renderFormFields(true)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button disabled={createMutation.isPending || !formData.name || !formData.email} onClick={() => createMutation.mutate(formData)}>
@@ -403,7 +403,7 @@ const AdminUsersPage = () => {
             <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5" /> Edit User</DialogTitle>
             <DialogDescription>Update pharmacy account details</DialogDescription>
           </DialogHeader>
-          <UserFormFields isCreate={false} />
+          {renderFormFields(false)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
             <Button disabled={updateMutation.isPending || !formData.name || !formData.email} onClick={() => editUser && updateMutation.mutate({ id: editUser.id, data: formData })}>
