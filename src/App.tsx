@@ -6,9 +6,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { FullPageSpinner } from "./components/LoadingSpinner";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AdminRoute } from "./components/AdminRoute";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import { DashboardLayout } from "./components/DashboardLayout";
+import { AdminLayout } from "./components/AdminLayout";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const PharmacyRegisterPage = lazy(() => import("./pages/PharmacyRegisterPage"));
@@ -20,6 +22,13 @@ const AlertSettingsPage = lazy(() => import("./pages/AlertSettingsPage"));
 const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 const SecurityAuditPage = lazy(() => import("./pages/SecurityAuditPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+
+// Admin pages
+const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
+const AdminApprovalsPage = lazy(() => import("./pages/admin/AdminApprovalsPage"));
+const AdminAnalyticsPage = lazy(() => import("./pages/admin/AdminAnalyticsPage"));
+const AdminDrugsPage = lazy(() => import("./pages/admin/AdminDrugsPage"));
+const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
 
 const queryClient = new QueryClient();
 
@@ -51,6 +60,17 @@ const App = () => (
               <Route path="alerts" element={<AlertSettingsPage />} />
               <Route path="profile" element={<PharmacyProfilePage />} />
               <Route path="security" element={<SecurityAuditPage />} />
+            </Route>
+            <Route path="/admin" element={
+              <AdminRoute>
+                <AdminLayout />
+              </AdminRoute>
+            }>
+              <Route index element={<AdminOverviewPage />} />
+              <Route path="approvals" element={<AdminApprovalsPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="drugs" element={<AdminDrugsPage />} />
+              <Route path="users" element={<AdminUsersPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
