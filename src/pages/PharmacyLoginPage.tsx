@@ -72,23 +72,50 @@ const PharmacyLoginPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Check lockout before attempting
+    const { locked, remainingMs } = checkLockout(email);
+    if (locked) {
+      setIsLockedOut(true);
+      setLockoutRemaining(formatLockoutTime(remainingMs));
+      toast.error(`Account temporarily locked. Try again in ${formatLockoutTime(remainingMs)}.`);
+      return;
+    }
     try {
       setIsLoading(true);
       await login(email, password);
+      resetLockout(email);
+      setFailedAttempts(0);
       toast.success('Welcome back!');
       navigate('/dashboard');
     } catch (error: any) {
       // Check if server requires 2FA
       if (error.response?.status === 403 && error.response?.data?.requires_2fa) {
+        resetLockout(email);
         setRequires2FA(true);
         setTempToken(error.response.data.temp_token || '');
         toast.info('Enter your 2FA code to continue');
+      } else if (error.response?.status === 423) {
+        // Server-side lockout
+        setIsLockedOut(true);
+        const serverMsg = error.response?.data?.retry_after_ms;
+        setLockoutRemaining(serverMsg ? formatLockoutTime(serverMsg) : '15 minutes');
+        toast.error('Account locked due to too many failed attempts.');
       } else {
-        const message = error.response?.data?.error || 'Invalid email or password. Please try again.';
-        toast.error(message);
+        const result = recordFailedAttempt(email);
+        setFailedAttempts(result.attempts);
+        if (result.locked) {
+          setIsLockedOut(true);
+          setLockoutRemaining(formatLockoutTime(result.remainingMs));
+          toast.error(`Too many failed attempts. Account locked for ${formatLockoutTime(result.remainingMs)}.`);
+        } else {
+          const remaining = 5 - result.attempts;
+          const message = error.response?.data?.error || 'Invalid email or password.';
+          toast.error(`${message} ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`);
+        }
       }
     } finally {
       setIsLoading(false);
+    }
     }
   };
 
