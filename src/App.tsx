@@ -19,6 +19,7 @@ const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
 const AlertSettingsPage = lazy(() => import("./pages/AlertSettingsPage"));
 const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 const SecurityAuditPage = lazy(() => import("./pages/SecurityAuditPage"));
+const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 
 const queryClient = new QueryClient();
 
