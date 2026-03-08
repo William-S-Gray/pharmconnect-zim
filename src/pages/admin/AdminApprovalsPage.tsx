@@ -89,9 +89,16 @@ const AdminApprovalsPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Approvals</h1>
-        <p className="text-muted-foreground text-sm">Review and approve pharmacy registrations</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Approvals</h1>
+          <p className="text-muted-foreground text-sm">Review and approve pharmacy registrations</p>
+        </div>
+        <ExportDropdown
+          disabled={!filtered.length}
+          onCSV={() => exportCSV(filtered.map(p => ({ Name: p.name, Email: p.email, Phone: p.phone, City: p.city, Suburb: p.suburb, 'MCAZ License': p.mcaz_license, Status: p.status, Submitted: p.submitted_at })), 'pharmacy-approvals')}
+          onExcel={() => exportExcel(filtered.map(p => ({ Name: p.name, Email: p.email, Phone: p.phone, City: p.city, Suburb: p.suburb, 'MCAZ License': p.mcaz_license, Status: p.status, Submitted: p.submitted_at })), 'pharmacy-approvals', 'Approvals')}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
