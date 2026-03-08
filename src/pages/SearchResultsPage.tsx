@@ -9,6 +9,8 @@ import { SearchX } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import api from '@/lib/api';
 import type { StockStatus } from '@/lib/mockData';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
 
 interface SearchResult {
   pharmacy_id: string;
