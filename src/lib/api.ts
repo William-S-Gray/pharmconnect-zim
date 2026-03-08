@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { rateLimiter } from './rateLimiter';
 import { getDeduplicationKey, getInflight, setInflight } from './requestDedup';
+import { getCsrfToken, isMutationMethod, CSRF_HEADER } from './csrfToken';
 import { toast } from 'sonner';
 
 const api = axios.create({
@@ -14,6 +15,12 @@ api.interceptors.request.use((config) => {
   // Attach JWT token
   const token = localStorage.getItem('pharmtrack_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+
+  // Attach CSRF token to mutation requests
+  const method = config.method || 'get';
+  if (isMutationMethod(method)) {
+    config.headers[CSRF_HEADER] = getCsrfToken();
+  }
 
   // Rate limiting check
   const endpoint = config.url || '';

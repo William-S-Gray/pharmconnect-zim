@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import api from '../lib/api';
 import { rateLimiter } from '../lib/rateLimiter';
+import { refreshCsrfToken, clearCsrfToken } from '../lib/csrfToken';
 
 export interface Pharmacy {
   id: string;
@@ -132,6 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setPharmacy(sanitized);
     // Reset login rate limit on success
     rateLimiter.reset('/api/auth/login');
+    refreshCsrfToken();
   }, []);
 
   const logout = useCallback(() => {
@@ -140,6 +142,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     setPharmacy(null);
     rateLimiter.clearAll();
+    clearCsrfToken();
   }, []);
 
   return (
