@@ -5,6 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, XCircle, Eye, Search, MapPin, Phone } from 'lucide-react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -87,9 +89,16 @@ const AdminApprovalsPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Approvals</h1>
-        <p className="text-muted-foreground text-sm">Review and approve pharmacy registrations</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Approvals</h1>
+          <p className="text-muted-foreground text-sm">Review and approve pharmacy registrations</p>
+        </div>
+        <ExportDropdown
+          disabled={!filtered.length}
+          onCSV={() => exportCSV(filtered.map(p => ({ Name: p.name, Email: p.email, Phone: p.phone, City: p.city, Suburb: p.suburb, 'MCAZ License': p.mcaz_license, Status: p.status, Submitted: p.submitted_at })), 'pharmacy-approvals')}
+          onExcel={() => exportExcel(filtered.map(p => ({ Name: p.name, Email: p.email, Phone: p.phone, City: p.city, Suburb: p.suburb, 'MCAZ License': p.mcaz_license, Status: p.status, Submitted: p.submitted_at })), 'pharmacy-approvals', 'Approvals')}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

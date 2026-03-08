@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, Ban, CheckCircle, CreditCard } from 'lucide-react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
@@ -89,9 +91,16 @@ const AdminUsersPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">User Management</h1>
-        <p className="text-muted-foreground text-sm">{users.length} registered pharmacies</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">User Management</h1>
+          <p className="text-muted-foreground text-sm">{users.length} registered pharmacies</p>
+        </div>
+        <ExportDropdown
+          disabled={!filtered.length}
+          onCSV={() => exportCSV(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list')}
+          onExcel={() => exportExcel(filtered.map(u => ({ Name: u.name, Email: u.email, Phone: u.phone, City: u.city, Suburb: u.suburb, Status: u.status, Plan: u.plan_tier, 'Drug Count': u.drug_count, Joined: u.joined })), 'user-list', 'Users')}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
