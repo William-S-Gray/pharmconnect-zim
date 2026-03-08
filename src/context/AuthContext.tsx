@@ -39,6 +39,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
+    // Demo mode — bypass backend
+    if (email === 'demo@pharmtrack.co.zw' && password === 'demo1234') {
+      const demoPharmacy: Pharmacy = {
+        id: 'demo-001',
+        name: 'HealthPlus Pharmacy',
+        email: 'demo@pharmtrack.co.zw',
+        phone: '0771 234 567',
+        city: 'Harare',
+        suburb: 'Avondale',
+        status: 'APPROVED',
+        plan_tier: 'PRO',
+      };
+      const demoToken = 'demo-token-pharmtrack';
+      localStorage.setItem('pharmtrack_token', demoToken);
+      localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(demoPharmacy));
+      setToken(demoToken);
+      setPharmacy(demoPharmacy);
+      return;
+    }
+
     const response = await api.post('/api/auth/login', { email, password });
     const { token: newToken, pharmacy: newPharmacy } = response.data;
     localStorage.setItem('pharmtrack_token', newToken);
