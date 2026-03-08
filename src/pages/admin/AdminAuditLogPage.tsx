@@ -301,7 +301,20 @@ const AdminAuditLogPage = () => {
                 </Table>
               </div>
               <div className="p-4 border-t border-border">
-                <PaginationControls {...pagination} />
+                <PaginationControls
+                  page={pagination.page}
+                  totalPages={pagination.totalPages}
+                  canPrev={pagination.canPrev}
+                  canNext={pagination.canNext}
+                  onPrev={pagination.prevPage}
+                  onNext={pagination.nextPage}
+                  onPageChange={pagination.setPage}
+                  startIndex={pagination.startIndex}
+                  endIndex={pagination.endIndex}
+                  totalItems={pagination.totalItems}
+                  pageSize={pagination.pageSize}
+                  onPageSizeChange={pagination.setPageSize}
+                />
               </div>
             </>
           )}
