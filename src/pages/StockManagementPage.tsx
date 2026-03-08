@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StockStatusBadge } from '@/components/StockStatusBadge';
-import { Plus, Search, Upload, Download, FileSpreadsheet, Trash2 } from 'lucide-react';
+import { Plus, Search, Upload, Download, FileSpreadsheet, Trash2, Pencil } from 'lucide-react';
 import { getStockStatus } from '@/lib/mockData';
 import type { StockStatus } from '@/lib/mockData';
 import { AddEditDrugSheet, type StockFormData } from '@/components/AddEditDrugSheet';
@@ -47,59 +47,67 @@ const StockManagementPage = () => {
   const [filter, setFilter] = useState<'ALL' | StockStatus>('ALL');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editItem, setEditItem] = useState<StockFormData | null>(null);
+  const [editItemId, setEditItemId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const filtered = items.filter(item => {
-    const matchesSearch = item.drugName.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = item.drugName.toLowerCase().includes(search.toLowerCase()) ||
+      item.strength.toLowerCase().includes(search.toLowerCase());
     const matchesFilter = filter === 'ALL' || item.status === filter;
     return matchesSearch && matchesFilter;
   });
 
   const handleAddDrug = (data: StockFormData) => {
-    setLoading(true);
-    setTimeout(() => {
-      const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
-      const newItem: StockItem = {
-        id: Date.now().toString(),
-        drugId: data.drugId,
-        drugName: data.drugName,
-        strength: data.strength,
-        form: data.form,
-        quantity: data.quantity,
-        unitPrice: data.unitPrice,
-        threshold: data.threshold,
-        expiryDate: data.expiryDate,
-        isAvailable: data.isAvailable,
-        status,
-      };
-      setItems(prev => [...prev, newItem]);
-      setLoading(false);
-      toast.success(`${data.drugName} added to inventory`);
-    }, 600);
+    const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
+    const newItem: StockItem = {
+      id: Date.now().toString(),
+      drugId: data.drugId || `custom-${Date.now()}`,
+      drugName: data.drugName,
+      strength: data.strength,
+      form: data.form,
+      quantity: data.quantity,
+      unitPrice: data.unitPrice,
+      threshold: data.threshold,
+      expiryDate: data.expiryDate,
+      isAvailable: data.isAvailable,
+      status,
+    };
+    setItems(prev => [...prev, newItem]);
+    toast.success(`${data.drugName} added to inventory`);
   };
 
   const handleEditDrug = (data: StockFormData) => {
-    setLoading(true);
-    setTimeout(() => {
-      const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
-      setItems(prev => prev.map(item =>
-        item.drugId === data.drugId
-          ? { ...item, quantity: data.quantity, unitPrice: data.unitPrice, threshold: data.threshold, expiryDate: data.expiryDate, isAvailable: data.isAvailable, status }
-          : item
-      ));
-      setEditItem(null);
-      setLoading(false);
-      toast.success(`${data.drugName} updated`);
-    }, 600);
+    if (!editItemId) return;
+    const status = getStockStatus(data.quantity, data.threshold, data.isAvailable);
+    setItems(prev => prev.map(item =>
+      item.id === editItemId
+        ? {
+            ...item,
+            drugName: data.drugName,
+            strength: data.strength,
+            form: data.form,
+            quantity: data.quantity,
+            unitPrice: data.unitPrice,
+            threshold: data.threshold,
+            expiryDate: data.expiryDate,
+            isAvailable: data.isAvailable,
+            status,
+          }
+        : item
+    ));
+    setEditItem(null);
+    setEditItemId(null);
+    toast.success(`${data.drugName} updated`);
   };
 
   const handleDelete = () => {
     if (!deleteId) return;
+    const drug = items.find(i => i.id === deleteId);
     setItems(prev => prev.filter(item => item.id !== deleteId));
     setDeleteId(null);
-    toast.success('Drug removed from inventory');
+    toast.success(`${drug?.drugName || 'Drug'} removed from inventory`);
   };
 
   const handleImport = (rows: { drug_name: string; quantity: number; unit_price: number; threshold: number }[]) => {
@@ -124,7 +132,7 @@ const StockManagementPage = () => {
       setItems(prev => [...prev, ...newItems]);
       setLoading(false);
       toast.success(`${rows.length} drug(s) imported`);
-    }, 800);
+    }, 500);
   };
 
   const handleExportCSV = () => {
@@ -138,6 +146,7 @@ const StockManagementPage = () => {
   };
 
   const openEdit = (item: StockItem) => {
+    setEditItemId(item.id);
     setEditItem({
       drugId: item.drugId,
       drugName: item.drugName,
@@ -154,6 +163,7 @@ const StockManagementPage = () => {
 
   const openAdd = () => {
     setEditItem(null);
+    setEditItemId(null);
     setSheetOpen(true);
   };
 
@@ -184,16 +194,15 @@ const StockManagementPage = () => {
         </div>
       </div>
 
-      {/* Loading overlay */}
       {loading && (
         <div className="py-8">
           <LoadingSpinner size="md" label="Updating inventory..." />
         </div>
       )}
 
-      {/* Desktop table */}
       {!loading && (
         <>
+          {/* Desktop table */}
           <div className="hidden md:block skeu-inset overflow-hidden p-0">
             <table className="w-full text-sm">
               <thead>
@@ -217,7 +226,9 @@ const StockManagementPage = () => {
                     <td className="p-3 text-center"><StockStatusBadge status={item.status} /></td>
                     <td className="p-3 text-right">
                       <div className="flex gap-1 justify-end">
-                        <Button size="sm" variant="outline" className="text-xs" onClick={() => openEdit(item)}>Edit</Button>
+                        <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openEdit(item)}>
+                          <Pencil className="w-3 h-3" /> Edit
+                        </Button>
                         <Button size="sm" variant="ghost" className="text-xs text-destructive hover:text-destructive" onClick={() => setDeleteId(item.id)}>
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -247,7 +258,9 @@ const StockManagementPage = () => {
                   <span className="text-muted-foreground">Qty: <span className="font-mono-drug text-foreground">{item.quantity}</span></span>
                   <span className="font-mono-drug text-foreground">${item.unitPrice.toFixed(2)}</span>
                   <div className="flex gap-1">
-                    <Button size="sm" variant="outline" className="text-xs" onClick={() => openEdit(item)}>Edit</Button>
+                    <Button size="sm" variant="outline" className="text-xs gap-1" onClick={() => openEdit(item)}>
+                      <Pencil className="w-3 h-3" /> Edit
+                    </Button>
                     <Button size="sm" variant="ghost" className="text-xs text-destructive" onClick={() => setDeleteId(item.id)}>
                       <Trash2 className="w-3.5 h-3.5" />
                     </Button>
@@ -259,7 +272,7 @@ const StockManagementPage = () => {
         </>
       )}
 
-      {/* Import / Export buttons */}
+      {/* Import / Export */}
       <div className="flex gap-3 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
           <Upload className="w-4 h-4 mr-2" /> Import
@@ -282,7 +295,6 @@ const StockManagementPage = () => {
         <span className="text-xs text-muted-foreground self-center">{filtered.length} drug{filtered.length !== 1 ? 's' : ''} shown</span>
       </div>
 
-      {/* Sheets & Modals */}
       <AddEditDrugSheet
         open={sheetOpen}
         onOpenChange={setSheetOpen}
@@ -296,7 +308,6 @@ const StockManagementPage = () => {
         onConfirm={handleImport}
       />
 
-      {/* Delete confirmation */}
       <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent style={{
           background: 'linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 96%) 100%)',
