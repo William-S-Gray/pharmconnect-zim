@@ -64,6 +64,8 @@ const SearchResultsPage = () => {
     return (statusOrder[a.stock_status] ?? 2) - (statusOrder[b.stock_status] ?? 2);
   });
 
+  const pagination = usePagination(sorted, { defaultPageSize: 10 });
+
   const handleSearch = (query: string) => {
     setSearchParams({ drug: query, city: cityParam });
   };
