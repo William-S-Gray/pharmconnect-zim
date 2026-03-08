@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, LogOut, Settings } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, LogOut, Settings, ScrollText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
