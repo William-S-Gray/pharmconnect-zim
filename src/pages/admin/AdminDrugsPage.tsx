@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,6 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 interface Drug {
   id: string;
@@ -21,55 +24,71 @@ interface Drug {
 const categories = ['Analgesic', 'Antibiotic', 'Antidiabetic', 'Antihypertensive', 'Antifungal', 'Antihistamine', 'GI', 'Cardiovascular', 'Other'];
 const dosageForms = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Ointment', 'Drops', 'Suspension'];
 
-const mockDrugs: Drug[] = [
-  { id: 'd1', name: 'Panado', generic_name: 'Paracetamol', category: 'Analgesic', dosage_form: 'Tablet', strength: '500mg' },
-  { id: 'd2', name: 'Amoxil', generic_name: 'Amoxicillin', category: 'Antibiotic', dosage_form: 'Capsule', strength: '500mg' },
-  { id: 'd3', name: 'Glucophage', generic_name: 'Metformin', category: 'Antidiabetic', dosage_form: 'Tablet', strength: '850mg' },
-  { id: 'd4', name: 'Losec', generic_name: 'Omeprazole', category: 'GI', dosage_form: 'Capsule', strength: '20mg' },
-  { id: 'd5', name: 'Ciprobay', generic_name: 'Ciprofloxacin', category: 'Antibiotic', dosage_form: 'Tablet', strength: '500mg' },
-  { id: 'd6', name: 'Brufen', generic_name: 'Ibuprofen', category: 'Analgesic', dosage_form: 'Tablet', strength: '400mg' },
-  { id: 'd7', name: 'Amloc', generic_name: 'Amlodipine', category: 'Antihypertensive', dosage_form: 'Tablet', strength: '5mg' },
-  { id: 'd8', name: 'Flagyl', generic_name: 'Metronidazole', category: 'Antibiotic', dosage_form: 'Tablet', strength: '400mg' },
-];
-
-const emptyDrug: Omit<Drug, 'id'> = { name: '', generic_name: '', category: '', dosage_form: '', strength: '' };
+type DrugForm = Omit<Drug, 'id'>;
+const emptyDrug: DrugForm = { name: '', generic_name: '', category: '', dosage_form: '', strength: '' };
 
 const AdminDrugsPage = () => {
-  const [drugs, setDrugs] = useState(mockDrugs);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [catFilter, setCatFilter] = useState('ALL');
   const [showEditor, setShowEditor] = useState(false);
   const [editingDrug, setEditingDrug] = useState<Drug | null>(null);
-  const [form, setForm] = useState(emptyDrug);
+  const [form, setForm] = useState<DrugForm>(emptyDrug);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
+  const { data: drugs = [], isLoading } = useQuery<Drug[]>({
+    queryKey: ['admin', 'drugs', catFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (catFilter !== 'ALL') params.category = catFilter;
+      const res = await api.get('/api/admin/drugs', { params });
+      return res.data;
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { id?: string; drug: DrugForm }) => {
+      if (data.id) {
+        return api.put(`/api/admin/drugs/${data.id}`, data.drug);
+      }
+      return api.post('/api/admin/drugs', data.drug);
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+      toast.success(vars.id ? 'Drug updated' : 'Drug added to database');
+      setShowEditor(false);
+    },
+    onError: () => toast.error('Failed to save drug'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/drugs/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+      toast.success('Drug removed from database');
+      setShowDeleteConfirm(null);
+    },
+    onError: () => toast.error('Failed to delete drug'),
+  });
+
   const openAdd = () => { setEditingDrug(null); setForm(emptyDrug); setShowEditor(true); };
-  const openEdit = (drug: Drug) => { setEditingDrug(drug); setForm({ name: drug.name, generic_name: drug.generic_name, category: drug.category, dosage_form: drug.dosage_form, strength: drug.strength }); setShowEditor(true); };
+  const openEdit = (drug: Drug) => {
+    setEditingDrug(drug);
+    setForm({ name: drug.name, generic_name: drug.generic_name, category: drug.category, dosage_form: drug.dosage_form, strength: drug.strength });
+    setShowEditor(true);
+  };
 
   const handleSave = () => {
     if (!form.name || !form.generic_name || !form.category || !form.dosage_form) {
       toast.error('Please fill all required fields'); return;
     }
-    if (editingDrug) {
-      setDrugs(prev => prev.map(d => d.id === editingDrug.id ? { ...d, ...form } : d));
-      toast.success('Drug updated');
-    } else {
-      setDrugs(prev => [...prev, { id: `d-${Date.now()}`, ...form }]);
-      toast.success('Drug added to database');
-    }
-    setShowEditor(false);
-  };
-
-  const handleDelete = (id: string) => {
-    setDrugs(prev => prev.filter(d => d.id !== id));
-    toast.success('Drug removed from database');
-    setShowDeleteConfirm(null);
+    saveMutation.mutate({ id: editingDrug?.id, drug: form });
   };
 
   const filtered = drugs.filter(d => {
-    const matchesCat = catFilter === 'ALL' || d.category === catFilter;
-    const matchesSearch = !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
-    return matchesCat && matchesSearch;
+    return !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
   });
 
   return (
@@ -96,42 +115,46 @@ const AdminDrugsPage = () => {
         </Select>
       </div>
 
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left p-3 font-medium text-muted-foreground">Brand Name</th>
-                  <th className="text-left p-3 font-medium text-muted-foreground">Generic Name</th>
-                  <th className="text-left p-3 font-medium text-muted-foreground hidden sm:table-cell">Category</th>
-                  <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Form</th>
-                  <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Strength</th>
-                  <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((d) => (
-                  <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-medium text-foreground">{d.name}</td>
-                    <td className="p-3 text-muted-foreground">{d.generic_name}</td>
-                    <td className="p-3 hidden sm:table-cell"><Badge variant="outline" className="text-xs">{d.category}</Badge></td>
-                    <td className="p-3 text-muted-foreground hidden md:table-cell">{d.dosage_form}</td>
-                    <td className="p-3 text-muted-foreground hidden md:table-cell">{d.strength}</td>
-                    <td className="p-3 text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-3.5 h-3.5" /></Button>
-                        <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setShowDeleteConfirm(d.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
-                      </div>
-                    </td>
+      {isLoading ? (
+        <div className="py-8"><LoadingSpinner size="lg" label="Loading drugs..." /></div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 font-medium text-muted-foreground">Brand Name</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">Generic Name</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden sm:table-cell">Category</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Form</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Strength</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-            {filtered.length === 0 && <p className="p-8 text-center text-muted-foreground">No drugs found.</p>}
-          </div>
-        </CardContent>
-      </Card>
+                </thead>
+                <tbody>
+                  {filtered.map((d) => (
+                    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3 font-medium text-foreground">{d.name}</td>
+                      <td className="p-3 text-muted-foreground">{d.generic_name}</td>
+                      <td className="p-3 hidden sm:table-cell"><Badge variant="outline" className="text-xs">{d.category}</Badge></td>
+                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.dosage_form}</td>
+                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.strength}</td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-3.5 h-3.5" /></Button>
+                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setShowDeleteConfirm(d.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && <p className="p-8 text-center text-muted-foreground">No drugs found.</p>}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={showEditor} onOpenChange={setShowEditor}>
@@ -162,7 +185,7 @@ const AdminDrugsPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowEditor(false)}>Cancel</Button>
-            <Button onClick={handleSave}>{editingDrug ? 'Update' : 'Add Drug'}</Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Saving...' : editingDrug ? 'Update' : 'Add Drug'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -174,7 +197,9 @@ const AdminDrugsPage = () => {
           <p className="text-sm text-muted-foreground">Are you sure? This will remove the drug from the master database. Pharmacies with this drug in their stock will be affected.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>Cancel</Button>
-            <Button variant="destructive" onClick={() => showDeleteConfirm && handleDelete(showDeleteConfirm)}>Delete</Button>
+            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => showDeleteConfirm && deleteMutation.mutate(showDeleteConfirm)}>
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

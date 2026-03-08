@@ -8,6 +8,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Search, MapPin, Ban, CheckCircle, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 interface PharmacyUser {
   id: string;
@@ -22,41 +25,48 @@ interface PharmacyUser {
   joined: string;
 }
 
-const mockUsers: PharmacyUser[] = [
-  { id: 'u1', name: 'HealthPlus Pharmacy', email: 'healthplus@mail.co.zw', phone: '0771 234 567', city: 'Harare', suburb: 'Avondale', status: 'APPROVED', plan_tier: 'PRO', drug_count: 312, joined: '2025-08-15' },
-  { id: 'u2', name: 'ZimPharm Central', email: 'zimpharm@mail.co.zw', phone: '0772 345 678', city: 'Harare', suburb: 'CBD', status: 'APPROVED', plan_tier: 'BASIC', drug_count: 189, joined: '2025-09-20' },
-  { id: 'u3', name: 'CareWell Pharmacy', email: 'carewell@mail.co.zw', phone: '0773 456 789', city: 'Harare', suburb: 'Borrowdale', status: 'APPROVED', plan_tier: 'FREE', drug_count: 67, joined: '2025-11-02' },
-  { id: 'u4', name: 'MedZim Pharmacy', email: 'medzim@mail.co.zw', phone: '0774 567 890', city: 'Bulawayo', suburb: 'City Centre', status: 'SUSPENDED', plan_tier: 'BASIC', drug_count: 0, joined: '2025-10-10' },
-  { id: 'u5', name: 'Sunrise Health', email: 'sunrise@mail.co.zw', phone: '0775 678 901', city: 'Mutare', suburb: 'Main Street', status: 'APPROVED', plan_tier: 'PRO', drug_count: 456, joined: '2025-07-01' },
-  { id: 'u6', name: 'QuickMeds', email: 'quickmeds@mail.co.zw', phone: '0776 789 012', city: 'Gweru', suburb: 'Mkoba', status: 'PENDING', plan_tier: 'FREE', drug_count: 0, joined: '2026-03-04' },
-];
-
 const AdminUsersPage = () => {
-  const [users, setUsers] = useState(mockUsers);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [planFilter, setPlanFilter] = useState('ALL');
   const [changePlanUser, setChangePlanUser] = useState<PharmacyUser | null>(null);
-  const [newPlan, setNewPlan] = useState<string>('');
+  const [newPlan, setNewPlan] = useState('');
 
-  const handleToggleStatus = (id: string, currentStatus: string) => {
-    const next = currentStatus === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED';
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: next as 'APPROVED' | 'SUSPENDED' } : u));
-    toast.success(`Pharmacy ${next === 'SUSPENDED' ? 'suspended' : 'reactivated'}`);
-  };
+  const { data: users = [], isLoading } = useQuery<PharmacyUser[]>({
+    queryKey: ['admin', 'users', statusFilter, planFilter],
+    queryFn: async () => {
+      const params: Record<string, string> = {};
+      if (statusFilter !== 'ALL') params.status = statusFilter;
+      if (planFilter !== 'ALL') params.plan_tier = planFilter;
+      const res = await api.get('/api/admin/users', { params });
+      return res.data;
+    },
+  });
 
-  const handleChangePlan = () => {
-    if (!changePlanUser || !newPlan) return;
-    setUsers(prev => prev.map(u => u.id === changePlanUser.id ? { ...u, plan_tier: newPlan as 'FREE' | 'BASIC' | 'PRO' } : u));
-    toast.success(`Plan changed to ${newPlan}`);
-    setChangePlanUser(null);
-  };
+  const toggleStatusMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.put(`/api/admin/users/${id}/status`, { status }),
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success(`Pharmacy ${vars.status === 'SUSPENDED' ? 'suspended' : 'reactivated'}`);
+    },
+    onError: () => toast.error('Failed to update status'),
+  });
+
+  const changePlanMutation = useMutation({
+    mutationFn: ({ id, plan_tier }: { id: string; plan_tier: string }) =>
+      api.put(`/api/admin/users/${id}/plan`, { plan_tier }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      toast.success(`Plan changed to ${newPlan}`);
+      setChangePlanUser(null);
+    },
+    onError: () => toast.error('Failed to change plan'),
+  });
 
   const filtered = users.filter(u => {
-    const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter;
-    const matchesPlan = planFilter === 'ALL' || u.plan_tier === planFilter;
-    const matchesSearch = !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
-    return matchesStatus && matchesPlan && matchesSearch;
+    return !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
   });
 
   const statusBadge = (status: string) => {
@@ -105,46 +115,54 @@ const AdminUsersPage = () => {
         </Select>
       </div>
 
-      <div className="space-y-3">
-        {filtered.map((u) => (
-          <Card key={u.id}>
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <h3 className="font-heading font-semibold text-foreground">{u.name}</h3>
-                    {statusBadge(u.status)}
-                    {planBadge(u.plan_tier)}
+      {isLoading ? (
+        <div className="py-8"><LoadingSpinner size="lg" label="Loading users..." /></div>
+      ) : (
+        <div className="space-y-3">
+          {filtered.map((u) => (
+            <Card key={u.id}>
+              <CardContent className="p-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <h3 className="font-heading font-semibold text-foreground">{u.name}</h3>
+                      {statusBadge(u.status)}
+                      {planBadge(u.plan_tier)}
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <span>{u.email}</span>
+                      <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {u.suburb}, {u.city}</span>
+                      <span>{u.drug_count} drugs listed</span>
+                      <span>Joined {new Date(u.joined).toLocaleDateString()}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                    <span>{u.email}</span>
-                    <span className="flex items-center gap-1"><MapPin className="w-3 h-3" /> {u.suburb}, {u.city}</span>
-                    <span>{u.drug_count} drugs listed</span>
-                    <span>Joined {new Date(u.joined).toLocaleDateString()}</span>
-                  </div>
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button size="sm" variant="outline" onClick={() => { setChangePlanUser(u); setNewPlan(u.plan_tier); }}>
-                    <CreditCard className="w-3.5 h-3.5 mr-1" /> Plan
-                  </Button>
-                  {u.status !== 'PENDING' && (
-                    <Button
-                      size="sm"
-                      variant={u.status === 'SUSPENDED' ? 'default' : 'destructive'}
-                      onClick={() => handleToggleStatus(u.id, u.status)}
-                    >
-                      {u.status === 'SUSPENDED' ? <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Reactivate</> : <><Ban className="w-3.5 h-3.5 mr-1" /> Suspend</>}
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" variant="outline" onClick={() => { setChangePlanUser(u); setNewPlan(u.plan_tier); }}>
+                      <CreditCard className="w-3.5 h-3.5 mr-1" /> Plan
                     </Button>
-                  )}
+                    {u.status !== 'PENDING' && (
+                      <Button
+                        size="sm"
+                        variant={u.status === 'SUSPENDED' ? 'default' : 'destructive'}
+                        disabled={toggleStatusMutation.isPending}
+                        onClick={() => toggleStatusMutation.mutate({
+                          id: u.id,
+                          status: u.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED',
+                        })}
+                      >
+                        {u.status === 'SUSPENDED' ? <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Reactivate</> : <><Ban className="w-3.5 h-3.5 mr-1" /> Suspend</>}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-        {filtered.length === 0 && (
-          <Card><CardContent className="p-8 text-center text-muted-foreground">No users match your filter.</CardContent></Card>
-        )}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+          {filtered.length === 0 && (
+            <Card><CardContent className="p-8 text-center text-muted-foreground">No users match your filter.</CardContent></Card>
+          )}
+        </div>
+      )}
 
       {/* Change Plan Dialog */}
       <Dialog open={!!changePlanUser} onOpenChange={() => setChangePlanUser(null)}>
@@ -163,7 +181,9 @@ const AdminUsersPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setChangePlanUser(null)}>Cancel</Button>
-            <Button onClick={handleChangePlan}>Update Plan</Button>
+            <Button disabled={changePlanMutation.isPending} onClick={() => changePlanUser && changePlanMutation.mutate({ id: changePlanUser.id, plan_tier: newPlan })}>
+              {changePlanMutation.isPending ? 'Updating...' : 'Update Plan'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
