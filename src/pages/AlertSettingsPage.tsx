@@ -192,7 +192,6 @@ const AlertSettingsPage = () => {
           <CardContent>
             <div className="skeu-inset p-1 space-y-0">
               <div
-                className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md"
                 className="hidden sm:grid grid-cols-[1fr_100px_80px] gap-3 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider rounded-t-md bg-muted"
               >
                 <span className="text-emboss">Drug</span>
