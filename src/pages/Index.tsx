@@ -90,7 +90,7 @@ const Index = () => {
 
       {/* CTA — recessed panel */}
       <section
-        className="border-t border-border"
+        className="border-t border-border cta-section"
         style={{
           background: 'linear-gradient(180deg, hsl(210 25% 91%) 0%, hsl(210 25% 93%) 100%)',
           boxShadow: 'inset 0 2px 6px rgba(0,0,0,0.05)',

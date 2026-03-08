@@ -92,6 +92,7 @@
     --popover-foreground: 210 40% 98%;
     --primary: 160 100% 39%;
     --primary-foreground: 222 47% 11%;
+    --primary-dark: 160 100% 30%;
     --secondary: 217 33% 17%;
     --secondary-foreground: 210 40% 98%;
     --muted: 217 33% 17%;
@@ -111,6 +112,27 @@
     --sidebar-accent-foreground: 210 40% 98%;
     --sidebar-border: 217 33% 22%;
     --sidebar-ring: 160 100% 39%;
+
+    --shadow-card:
+      0 1px 0 0 rgba(255,255,255,0.05) inset,
+      0 -1px 0 0 rgba(0,0,0,0.2) inset,
+      0 2px 8px rgba(0,0,0,0.3),
+      0 6px 20px rgba(0,0,0,0.2);
+    --shadow-elevated:
+      0 1px 0 0 rgba(255,255,255,0.07) inset,
+      0 -1px 0 0 rgba(0,0,0,0.25) inset,
+      0 8px 30px rgba(0,0,0,0.4),
+      0 2px 8px rgba(0,0,0,0.3);
+    --shadow-inset:
+      inset 0 2px 4px rgba(0,0,0,0.3),
+      inset 0 1px 2px rgba(0,0,0,0.2);
+    --shadow-button:
+      0 1px 0 0 rgba(255,255,255,0.1) inset,
+      0 -1px 0 0 rgba(0,0,0,0.3) inset,
+      0 2px 6px rgba(0,0,0,0.3);
+    --shadow-badge:
+      0 1px 0 0 rgba(255,255,255,0.15) inset,
+      0 1px 3px rgba(0,0,0,0.3);
   }
 }
 
@@ -120,10 +142,16 @@
   }
   body {
     @apply bg-background text-foreground font-body antialiased;
-    /* Subtle linen-like texture */
     background-image: 
       radial-gradient(circle at 20% 50%, hsl(210 25% 95% / 0.5) 0%, transparent 50%),
       radial-gradient(circle at 80% 50%, hsl(174 30% 92% / 0.3) 0%, transparent 50%);
+  }
+  .dark body,
+  body.dark,
+  .dark {
+    background-image: 
+      radial-gradient(circle at 20% 50%, hsl(222 47% 10% / 0.5) 0%, transparent 50%),
+      radial-gradient(circle at 80% 50%, hsl(174 30% 10% / 0.3) 0%, transparent 50%);
   }
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-heading);
@@ -172,6 +200,9 @@
     background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 97%) 100%);
     box-shadow: var(--shadow-card);
   }
+  .dark .card-pharma {
+    background: linear-gradient(180deg, hsl(222 40% 14%) 0%, hsl(222 40% 11%) 100%);
+  }
   .card-pharma-hover {
     @apply card-pharma cursor-pointer;
     transition: all 0.25s ease;
@@ -186,6 +217,9 @@
   .stat-card {
     @apply card-pharma flex flex-col gap-1;
     background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 96%) 100%);
+  }
+  .dark .stat-card {
+    background: linear-gradient(180deg, hsl(222 40% 14%) 0%, hsl(222 40% 10%) 100%);
   }
 
   /* ── Inset / Recessed surfaces ── */
@@ -203,10 +237,30 @@
       0 1px 0 0 rgba(255,255,255,0.8) inset,
       0 1px 4px rgba(0,0,0,0.08);
   }
+  .dark .skeu-toolbar {
+    background: linear-gradient(180deg, hsl(222 40% 13%) 0%, hsl(222 40% 9%) 100%);
+    box-shadow:
+      0 1px 0 0 rgba(255,255,255,0.05) inset,
+      0 1px 4px rgba(0,0,0,0.3);
+  }
+
+  /* ── Input skeu style ── */
+  .input-skeu {
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.07), inset 0 1px 2px rgba(0,0,0,0.05);
+    background: linear-gradient(180deg, hsl(0 0% 99%) 0%, hsl(210 20% 97%) 100%);
+  }
+  .dark .input-skeu {
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.3), inset 0 1px 2px rgba(0,0,0,0.2);
+    background: linear-gradient(180deg, hsl(222 40% 14%) 0%, hsl(222 40% 11%) 100%);
+    color: hsl(210 40% 98%);
+  }
 
   /* ── Embossed text ── */
   .text-emboss {
     text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+  }
+  .dark .text-emboss {
+    text-shadow: 0 1px 0 rgba(255,255,255,0.05);
   }
   .text-engrave {
     text-shadow: 0 -1px 0 rgba(0,0,0,0.3), 0 1px 0 rgba(255,255,255,0.1);
@@ -244,13 +298,28 @@
     border: 1px solid hsl(var(--border));
     transition: all 0.15s ease;
   }
+  .dark .btn-skeu-outline {
+    background: linear-gradient(180deg, hsl(222 40% 16%) 0%, hsl(222 40% 12%) 100%);
+    box-shadow:
+      0 1px 0 0 rgba(255,255,255,0.05) inset,
+      0 1px 4px rgba(0,0,0,0.3);
+  }
   .btn-skeu-outline:hover {
     background: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(210 20% 94%) 100%);
     box-shadow: var(--shadow-card);
     border-color: hsl(var(--primary) / 0.4);
   }
+  .dark .btn-skeu-outline:hover {
+    background: linear-gradient(180deg, hsl(222 40% 18%) 0%, hsl(222 40% 14%) 100%);
+  }
   .btn-skeu-outline:active {
     box-shadow: var(--shadow-inset);
     transform: translateY(1px);
+  }
+
+  /* ── Dark mode CTA section ── */
+  .dark .cta-section {
+    background: linear-gradient(180deg, hsl(222 40% 10%) 0%, hsl(222 40% 8%) 100%) !important;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.2) !important;
   }
 }
