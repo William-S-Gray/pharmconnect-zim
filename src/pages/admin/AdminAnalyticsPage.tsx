@@ -43,9 +43,34 @@ const AdminAnalyticsPage = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">System Analytics</h1>
-        <p className="text-muted-foreground text-sm">Network-wide statistics and trends</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">System Analytics</h1>
+          <p className="text-muted-foreground text-sm">Network-wide statistics and trends</p>
+        </div>
+        <ExportDropdown
+          disabled={!d.summary.length && !d.daily_searches.length}
+          onCSV={() => {
+            const rows = [
+              ...d.summary.map(s => ({ Section: 'Summary', Label: s.label, Value: s.value })),
+              ...d.daily_searches.map(s => ({ Section: 'Daily Searches', Label: s.day, Value: s.searches })),
+              ...d.top_drugs.map(s => ({ Section: 'Top Drugs', Label: s.name, Value: s.searches })),
+              ...d.registration_trend.map(s => ({ Section: 'Registrations', Label: s.month, Value: s.pharmacies })),
+              ...d.city_breakdown.map(s => ({ Section: 'Cities', Label: s.city, Value: s.count })),
+            ];
+            exportCSV(rows, 'analytics-report');
+          }}
+          onExcel={() => {
+            const rows = [
+              ...d.summary.map(s => ({ Section: 'Summary', Label: s.label, Value: s.value })),
+              ...d.daily_searches.map(s => ({ Section: 'Daily Searches', Label: s.day, Value: s.searches })),
+              ...d.top_drugs.map(s => ({ Section: 'Top Drugs', Label: s.name, Value: s.searches })),
+              ...d.registration_trend.map(s => ({ Section: 'Registrations', Label: s.month, Value: s.pharmacies })),
+              ...d.city_breakdown.map(s => ({ Section: 'Cities', Label: s.city, Value: s.count })),
+            ];
+            exportExcel(rows, 'analytics-report', 'Analytics');
+          }}
+        />
       </div>
 
       {d.summary.length > 0 && (

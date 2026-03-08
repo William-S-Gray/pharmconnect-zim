@@ -104,7 +104,14 @@ const AdminDrugsPage = () => {
           <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Drug Database</h1>
           <p className="text-muted-foreground text-sm">{drugs.length} drugs in master database</p>
         </div>
-        <Button onClick={openAdd} className="gap-2"><Plus className="w-4 h-4" /> Add Drug</Button>
+        <div className="flex gap-2">
+          <ExportDropdown
+            disabled={!filtered.length}
+            onCSV={() => exportCSV(filtered.map(d => ({ Name: d.name, 'Generic Name': d.generic_name, Category: d.category, 'Dosage Form': d.dosage_form, Strength: d.strength })), 'drug-database')}
+            onExcel={() => exportExcel(filtered.map(d => ({ Name: d.name, 'Generic Name': d.generic_name, Category: d.category, 'Dosage Form': d.dosage_form, Strength: d.strength })), 'drug-database', 'Drugs')}
+          />
+          <Button onClick={openAdd} className="gap-2"><Plus className="w-4 h-4" /> Add Drug</Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
