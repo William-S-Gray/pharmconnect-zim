@@ -9,6 +9,8 @@ import { ImportModal } from '@/components/ImportModal';
 import { exportToCSV, exportToExcel } from '@/lib/exportUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
