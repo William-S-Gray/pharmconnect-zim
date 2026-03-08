@@ -74,6 +74,8 @@ const AdminApprovalsPage = () => {
     return !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase());
   });
 
+  const pagination = usePagination(filtered, { defaultPageSize: 10 });
+
   const statusBadge = (status: string) => {
     switch (status) {
       case 'PENDING': return <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/20">Pending</Badge>;
