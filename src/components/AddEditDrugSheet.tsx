@@ -3,12 +3,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Search, Save } from 'lucide-react';
+import { Search, Save, PlusCircle } from 'lucide-react';
 import { searchDrugs, mockDrugs, type Drug } from '@/lib/mockData';
-import type { StockStatus } from '@/lib/mockData';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 export interface StockFormData {
   drugId: string;
@@ -29,8 +31,11 @@ interface AddEditDrugSheetProps {
   onSave: (data: StockFormData) => void;
 }
 
+const DRUG_FORMS = ['tablet', 'capsule', 'syrup', 'injection', 'inhaler', 'cream', 'ointment', 'drops', 'suspension', 'powder'];
+
 export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEditDrugSheetProps) {
   const isEdit = !!editData;
+  const [mode, setMode] = useState<'search' | 'custom'>('search');
   const [drugSearch, setDrugSearch] = useState('');
   const [drugResults, setDrugResults] = useState<Drug[]>([]);
   const [showDrugList, setShowDrugList] = useState(false);
@@ -41,13 +46,13 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
     expiryDate: '', isAvailable: true,
   });
   const debounceRef = useRef<NodeJS.Timeout>();
-  const wrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (editData) {
       setForm(editData);
       setSelectedDrug(mockDrugs.find(d => d.id === editData.drugId) || null);
       setDrugSearch('');
+      setMode('search');
     } else {
       setForm({
         drugId: '', drugName: '', strength: '', form: '',
@@ -56,6 +61,7 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
       });
       setSelectedDrug(null);
       setDrugSearch('');
+      setMode('search');
     }
   }, [editData, open]);
 
@@ -82,11 +88,26 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
     }));
   };
 
+  const switchToCustom = () => {
+    setMode('custom');
+    setSelectedDrug(null);
+    setShowDrugList(false);
+    setForm(prev => ({
+      ...prev,
+      drugId: `custom-${Date.now()}`,
+      drugName: drugSearch || '',
+      strength: '',
+      form: '',
+    }));
+  };
+
   const handleSave = () => {
     if (!form.drugName) return;
     onSave(form);
     onOpenChange(false);
   };
+
+  const drugSelected = selectedDrug || mode === 'custom' && form.drugName;
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -96,14 +117,14 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
         <SheetHeader>
           <SheetTitle className="text-emboss">{isEdit ? 'Edit Drug Stock' : 'Add Drug to Inventory'}</SheetTitle>
           <SheetDescription>
-            {isEdit ? 'Update the stock details below' : 'Search for a drug and set your stock levels'}
+            {isEdit ? 'Update the stock details below' : 'Search existing drugs or add a completely new one'}
           </SheetDescription>
         </SheetHeader>
 
         <div className="mt-6 space-y-5">
-          {/* Drug selector */}
-          {!isEdit && (
-            <div ref={wrapperRef} className="relative">
+          {/* Drug selector — only for adding */}
+          {!isEdit && mode === 'search' && (
+            <div className="relative">
               <Label>Search Drug</Label>
               <div className="relative mt-1">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -132,10 +153,65 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
                   ))}
                 </div>
               )}
+
+              {/* Add custom drug button */}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 w-full gap-2 text-xs"
+                onClick={switchToCustom}
+              >
+                <PlusCircle className="w-3.5 h-3.5" />
+                Drug not listed? Add a new drug manually
+              </Button>
             </div>
           )}
 
-          {/* Selected drug info */}
+          {/* Custom drug entry fields */}
+          {!isEdit && mode === 'custom' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold text-primary">New Custom Drug</Label>
+                <Button variant="ghost" size="sm" className="text-xs" onClick={() => { setMode('search'); setForm(prev => ({ ...prev, drugId: '', drugName: '', strength: '', form: '' })); }}>
+                  ← Back to search
+                </Button>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="customName">Drug Name *</Label>
+                <Input
+                  id="customName"
+                  value={form.drugName}
+                  onChange={(e) => setForm(prev => ({ ...prev, drugName: e.target.value }))}
+                  placeholder="e.g. Ibuprofen"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="customStrength">Strength *</Label>
+                  <Input
+                    id="customStrength"
+                    value={form.strength}
+                    onChange={(e) => setForm(prev => ({ ...prev, strength: e.target.value }))}
+                    placeholder="e.g. 400mg"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Form *</Label>
+                  <Select value={form.form} onValueChange={(v) => setForm(prev => ({ ...prev, form: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select form" /></SelectTrigger>
+                    <SelectContent>
+                      {DRUG_FORMS.map(f => (
+                        <SelectItem key={f} value={f}>{f.charAt(0).toUpperCase() + f.slice(1)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Selected drug info pill */}
           {(selectedDrug || isEdit) && (
             <div className="card-pharma p-3">
               <p className="font-heading font-semibold text-sm text-foreground text-emboss">
@@ -145,66 +221,70 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
             </div>
           )}
 
-          {/* Form fields */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="qty">Quantity in Stock *</Label>
-              <Input
-                id="qty"
-                type="number"
-                min={0}
-                value={form.quantity}
-                onChange={(e) => setForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="price">Unit Price (USD)</Label>
-              <Input
-                id="price"
-                type="number"
-                min={0}
-                step={0.01}
-                value={form.unitPrice}
-                onChange={(e) => setForm(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
-              />
-            </div>
-          </div>
+          {/* Stock fields — show when drug is selected/custom filled or editing */}
+          {(drugSelected || isEdit) && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="qty">Quantity in Stock *</Label>
+                  <Input
+                    id="qty"
+                    type="number"
+                    min={0}
+                    value={form.quantity}
+                    onChange={(e) => setForm(prev => ({ ...prev, quantity: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="price">Unit Price (USD)</Label>
+                  <Input
+                    id="price"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    value={form.unitPrice}
+                    onChange={(e) => setForm(prev => ({ ...prev, unitPrice: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="threshold">Reorder Threshold *</Label>
-              <Input
-                id="threshold"
-                type="number"
-                min={1}
-                value={form.threshold}
-                onChange={(e) => setForm(prev => ({ ...prev, threshold: Number(e.target.value) }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="expiry">Expiry Date</Label>
-              <Input
-                id="expiry"
-                type="date"
-                value={form.expiryDate}
-                onChange={(e) => setForm(prev => ({ ...prev, expiryDate: e.target.value }))}
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="threshold">Reorder Threshold *</Label>
+                  <Input
+                    id="threshold"
+                    type="number"
+                    min={1}
+                    value={form.threshold}
+                    onChange={(e) => setForm(prev => ({ ...prev, threshold: Number(e.target.value) }))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="expiry">Expiry Date</Label>
+                  <Input
+                    id="expiry"
+                    type="date"
+                    value={form.expiryDate}
+                    onChange={(e) => setForm(prev => ({ ...prev, expiryDate: e.target.value }))}
+                  />
+                </div>
+              </div>
 
-          <div className="flex items-center gap-3 py-1">
-            <Switch
-              checked={form.isAvailable}
-              onCheckedChange={(v) => setForm(prev => ({ ...prev, isAvailable: v }))}
-              id="available"
-            />
-            <Label htmlFor="available" className="cursor-pointer">Available for search</Label>
-          </div>
+              <div className="flex items-center gap-3 py-1">
+                <Switch
+                  checked={form.isAvailable}
+                  onCheckedChange={(v) => setForm(prev => ({ ...prev, isAvailable: v }))}
+                  id="available"
+                />
+                <Label htmlFor="available" className="cursor-pointer">Available for search</Label>
+              </div>
 
-          <Button onClick={handleSave} className="w-full gap-2" disabled={!form.drugName}>
-            <Save className="w-4 h-4" />
-            {isEdit ? 'Save Changes' : 'Add to Inventory'}
-          </Button>
+              <Button onClick={handleSave} className="w-full gap-2" disabled={!form.drugName || (!isEdit && mode === 'custom' && (!form.strength || !form.form))}>
+                <Save className="w-4 h-4" />
+                {isEdit ? 'Save Changes' : 'Add to Inventory'}
+              </Button>
+            </>
+          )}
         </div>
       </SheetContent>
     </Sheet>

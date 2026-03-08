@@ -1,7 +1,9 @@
-import { BarChart3, Package, AlertTriangle, CreditCard, TrendingUp } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { BarChart3, Package, AlertTriangle, CreditCard, TrendingUp, Clock } from 'lucide-react';
 import { StockStatusBadge } from '@/components/StockStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
+import { getCATGreeting, formatCATTime } from '@/lib/catTime';
 
 const stats = [
   { label: 'Searches this month', value: '847', icon: BarChart3, color: 'text-primary' },
@@ -23,11 +25,29 @@ const topSearches = [
 ];
 
 const PharmacyDashboard = () => {
+  const [greeting, setGreeting] = useState(getCATGreeting());
+  const [catTime, setCatTime] = useState(formatCATTime());
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setGreeting(getCATGreeting());
+      setCatTime(formatCATTime());
+    }, 30000); // update every 30s
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Good morning, Halsteads Pharmacy 👋</h1>
-        <p className="text-muted-foreground text-sm">Here's your overview for today</p>
+        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">
+          {greeting}, Halsteads Pharmacy 👋
+        </h1>
+        <div className="flex items-center gap-2 mt-1">
+          <Clock className="w-3.5 h-3.5 text-muted-foreground" />
+          <p className="text-muted-foreground text-sm">
+            {catTime} CAT · Here's your overview for today
+          </p>
+        </div>
       </div>
 
       {/* Stats */}
@@ -104,7 +124,7 @@ const PharmacyDashboard = () => {
         </div>
       </div>
 
-      {/* Upgrade banner — glossy teal */}
+      {/* Upgrade banner */}
       <div
         className="rounded-xl p-5 border"
         style={{
