@@ -8,6 +8,7 @@ import { Pill, Shield, Mail, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import { MathCaptcha } from '@/components/MathCaptcha';
 
 const PharmacyLoginPage = () => {
   const navigate = useNavigate();
