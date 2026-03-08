@@ -16,6 +16,7 @@ import {
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import LoginAlertSettings from '@/components/security/LoginAlertSettings';
 
 // ── Types ─────────────────────────────────────────────────────────
 interface Session {
@@ -396,6 +397,9 @@ const SecurityAuditPage = () => {
           ))}
         </CardContent>
       </Card>
+
+      {/* Login Email Alerts */}
+      <LoginAlertSettings />
 
       {/* 2FA Setup Dialog */}
       <Dialog open={show2FASetup} onOpenChange={setShow2FASetup}>
