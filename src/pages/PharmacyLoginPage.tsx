@@ -269,8 +269,21 @@ const PharmacyLoginPage = () => {
                 <div className="text-right">
                   <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShowForgot(true)}>Forgot password?</button>
                 </div>
-                <Button type="submit" className="w-full h-11" disabled={isLoading}>
-                  {isLoading ? 'Signing in...' : 'Sign In'}
+                {isLockedOut && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+                    <Lock className="w-4 h-4 text-destructive shrink-0" />
+                    <p className="text-sm text-destructive">
+                      Account locked. Try again in <strong>{lockoutRemaining}</strong>.
+                    </p>
+                  </div>
+                )}
+                {!isLockedOut && failedAttempts > 0 && failedAttempts < 5 && (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {5 - failedAttempts} attempt{5 - failedAttempts !== 1 ? 's' : ''} remaining before lockout
+                  </p>
+                )}
+                <Button type="submit" className="w-full h-11" disabled={isLoading || isLockedOut}>
+                  {isLoading ? 'Signing in...' : isLockedOut ? 'Account Locked' : 'Sign In'}
                 </Button>
                 <div className="relative my-2">
                   <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
