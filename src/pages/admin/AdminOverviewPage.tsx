@@ -26,13 +26,13 @@ const fallbackStats: AdminStats = {
 };
 
 const iconMap = [
-  { key: 'pending_approvals', label: 'Pending Approvals', icon: CheckSquare, color: 'text-orange-500', bg: 'bg-orange-500/10' },
-  { key: 'total_pharmacies', label: 'Total Pharmacies', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
-  { key: 'total_drugs', label: 'Drugs in Database', icon: Database, color: 'text-green-500', bg: 'bg-green-500/10' },
-  { key: 'searches_today', label: 'Searches Today', icon: BarChart3, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { key: 'stock_alerts', label: 'Stock Alerts', icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10' },
-  { key: 'growth_30d', label: 'Growth (30d)', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10', format: (v: number) => `${v > 0 ? '+' : ''}${v}%` },
-] as const;
+  { key: 'pending_approvals' as const, label: 'Pending Approvals', icon: CheckSquare, color: 'text-orange-500', bg: 'bg-orange-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'total_pharmacies' as const, label: 'Total Pharmacies', icon: Users, color: 'text-primary', bg: 'bg-primary/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'total_drugs' as const, label: 'Drugs in Database', icon: Database, color: 'text-green-500', bg: 'bg-green-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'searches_today' as const, label: 'Searches Today', icon: BarChart3, color: 'text-blue-500', bg: 'bg-blue-500/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'stock_alerts' as const, label: 'Stock Alerts', icon: AlertTriangle, color: 'text-destructive', bg: 'bg-destructive/10', format: undefined as ((v: number) => string) | undefined },
+  { key: 'growth_30d' as const, label: 'Growth (30d)', icon: TrendingUp, color: 'text-green-500', bg: 'bg-green-500/10', format: (v: number) => `${v > 0 ? '+' : ''}${v}%` },
+];
 
 const AdminOverviewPage = () => {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
