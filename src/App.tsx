@@ -30,6 +30,7 @@ const AdminAnalyticsPage = lazy(() => import("./pages/admin/AdminAnalyticsPage")
 const AdminDrugsPage = lazy(() => import("./pages/admin/AdminDrugsPage"));
 const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
 const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
+const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 
 const queryClient = new QueryClient();
 
