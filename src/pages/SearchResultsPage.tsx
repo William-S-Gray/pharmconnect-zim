@@ -114,7 +114,7 @@ const SearchResultsPage = () => {
               />
             ) : (
               <div className="space-y-3">
-                {sorted.map((result) => (
+                {pagination.paginatedItems.map((result) => (
                   <PharmacyResultCard
                     key={result.pharmacy_id}
                     pharmacyName={result.pharmacy_name}
@@ -128,6 +128,14 @@ const SearchResultsPage = () => {
                     isOpenNow={true}
                   />
                 ))}
+                <PaginationControls
+                  page={pagination.page} totalPages={pagination.totalPages}
+                  canPrev={pagination.canPrev} canNext={pagination.canNext}
+                  onPrev={pagination.prevPage} onNext={pagination.nextPage}
+                  onPageChange={pagination.setPage}
+                  startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+                  totalItems={pagination.totalItems}
+                />
               </div>
             )}
           </div>
