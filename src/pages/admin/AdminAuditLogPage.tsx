@@ -106,11 +106,7 @@ const AdminAuditLogPage = () => {
     return true;
   });
 
-  const pagination = usePagination({ totalItems: filtered.length, defaultPageSize: 15 });
-  const paged = filtered.slice(
-    (pagination.currentPage - 1) * pagination.pageSize,
-    pagination.currentPage * pagination.pageSize,
-  );
+  const pagination = usePagination(filtered, { defaultPageSize: 15 });
 
   const hasFilters = search || categoryFilter !== 'all' || actionFilter !== 'all' || dateFrom || dateTo;
 
