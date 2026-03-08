@@ -63,8 +63,7 @@ const SubscriptionPage = () => {
           return (
             <div
               key={plan.name}
-              className="card-pharma relative overflow-hidden"
-            className={`card-pharma relative overflow-hidden ${plan.popular ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''}`}
+              className={`card-pharma relative overflow-hidden ${plan.popular ? 'border-primary shadow-lg ring-1 ring-primary/20' : ''}`}
             >
               {plan.popular && (
                 <span

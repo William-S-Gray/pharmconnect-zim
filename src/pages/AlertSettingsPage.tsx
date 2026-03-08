@@ -202,7 +202,6 @@ const AlertSettingsPage = () => {
               {drugThresholds.map((item) => (
                 <div
                   key={item.id}
-                  className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30"
                   className="grid grid-cols-1 sm:grid-cols-[1fr_100px_80px] gap-3 items-center px-3 py-3 border-b border-border last:border-0 transition-colors hover:bg-muted/30 bg-card"
                 >
                   <span className="font-mono text-sm font-medium text-foreground">{item.drug}</span>
