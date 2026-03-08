@@ -71,6 +71,8 @@ const AdminUsersPage = () => {
     return !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase());
   });
 
+  const pagination = usePagination(filtered, { defaultPageSize: 10 });
+
   const statusBadge = (status: string) => {
     switch (status) {
       case 'APPROVED': return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-xs">Active</Badge>;
