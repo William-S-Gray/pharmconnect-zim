@@ -258,7 +258,7 @@ const AdminAuditLogPage = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paged.map((entry) => {
+                    {pagination.paginatedItems.map((entry) => {
                       const cat = categoryConfig[entry.category] || categoryConfig.system;
                       const ActionIcon = actionIcons[entry.action] || Eye;
                       return (
