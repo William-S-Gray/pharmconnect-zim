@@ -3,8 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { searchDrugs, type Drug } from '@/lib/mockData';
 import { useSearchStore } from '@/stores/searchStore';
+import api from '@/lib/api';
+
+interface Suggestion {
+  id: string;
+  common_name: string;
+  generic_name: string;
+  strength: string;
+  form: string;
+  category: string;
+}
 
 interface DrugSearchBarProps {
   variant?: 'hero' | 'compact';
@@ -14,7 +23,7 @@ interface DrugSearchBarProps {
 
 export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }: DrugSearchBarProps) {
   const [query, setQuery] = useState(initialQuery);
-  const [results, setResults] = useState<Drug[]>([]);
+  const [results, setResults] = useState<Suggestion[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const navigate = useNavigate();
@@ -36,14 +45,25 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
     setQuery(value);
     setSelectedIndex(-1);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const found = searchDrugs(value);
-      setResults(found);
-      setIsOpen(found.length > 0);
+    if (value.length < 2) {
+      setResults([]);
+      setIsOpen(false);
+      return;
+    }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await api.get('/api/search/autocomplete', { params: { q: value } });
+        const suggestions: Suggestion[] = res.data.suggestions || [];
+        setResults(suggestions);
+        setIsOpen(suggestions.length > 0);
+      } catch {
+        setResults([]);
+        setIsOpen(false);
+      }
     }, 300);
   };
 
-  const handleSelect = (drug: Drug) => {
+  const handleSelect = (drug: Suggestion) => {
     const searchText = `${drug.common_name} ${drug.strength}`;
     setQuery(searchText);
     setIsOpen(false);

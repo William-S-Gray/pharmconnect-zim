@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Pill, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import api from '@/lib/api';
 
 const PharmacyRegisterPage = () => {
   const navigate = useNavigate();
@@ -24,11 +25,26 @@ const PharmacyRegisterPage = () => {
     if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
     if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
 
-    setIsLoading(true);
-    await new Promise(r => setTimeout(r, 1500));
-    setIsLoading(false);
-    toast.success('Registration received! Our team will verify your pharmacy within 24 hours.');
-    navigate('/pharmacy/login');
+    try {
+      setIsLoading(true);
+      await api.post('/api/auth/register', {
+        name: form.name,
+        address: form.address,
+        suburb: form.suburb,
+        city: form.city,
+        phone: form.phone,
+        email: form.email,
+        password: form.password,
+        mcaz_license: form.mcazLicense,
+      });
+      toast.success('Registration received! Our team will verify your pharmacy within 24 hours.');
+      navigate('/pharmacy/login');
+    } catch (error: any) {
+      const message = error.response?.data?.error || 'Registration failed. Please try again.';
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

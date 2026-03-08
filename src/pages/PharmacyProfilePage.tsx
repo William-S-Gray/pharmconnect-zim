@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Building2, MapPin, Phone, Mail, Clock, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,16 +7,23 @@ import { Switch } from '@/components/ui/switch';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext';
+import api from '@/lib/api';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const PharmacyProfilePage = () => {
+  const { pharmacy } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   const [form, setForm] = useState({
-    name: 'Halsteads Pharmacy',
-    address: '15 King George Road',
-    suburb: 'Avondale',
+    name: '',
+    address: '',
+    suburb: '',
     city: 'Harare',
-    phone: '0771 234 567',
-    email: 'info@halsteads.co.zw',
-    mcazLicense: 'MCAZ-2024-0451',
+    phone: '',
+    email: '',
+    mcazLicense: '',
     isOpen24h: false,
   });
 
@@ -30,6 +37,42 @@ const PharmacyProfilePage = () => {
     sunday: { open: '09:00', close: '12:00', closed: true },
   });
 
+  useEffect(() => {
+    if (pharmacy) {
+      setForm({
+        name: pharmacy.name || '',
+        address: '',
+        suburb: pharmacy.suburb || '',
+        city: pharmacy.city || 'Harare',
+        phone: pharmacy.phone || '',
+        email: pharmacy.email || '',
+        mcazLicense: '',
+        isOpen24h: false,
+      });
+      // Fetch full profile from API
+      setIsLoading(true);
+      api.get('/api/pharmacy/profile')
+        .then(res => {
+          const p = res.data;
+          setForm({
+            name: p.name || pharmacy.name || '',
+            address: p.address || '',
+            suburb: p.suburb || pharmacy.suburb || '',
+            city: p.city || pharmacy.city || 'Harare',
+            phone: p.phone || pharmacy.phone || '',
+            email: p.email || pharmacy.email || '',
+            mcazLicense: p.mcaz_license || '',
+            isOpen24h: p.is_open_24h || false,
+          });
+          if (p.operating_hours) {
+            setHours(p.operating_hours);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setIsLoading(false));
+    }
+  }, [pharmacy]);
+
   const updateField = (field: string, value: string | boolean) => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
@@ -41,11 +84,37 @@ const PharmacyProfilePage = () => {
     }));
   };
 
-  const handleSave = () => {
-    toast({ title: 'Profile updated', description: 'Your pharmacy details have been saved.' });
+  const handleSave = async () => {
+    try {
+      setIsSaving(true);
+      await api.put('/api/pharmacy/profile', {
+        name: form.name,
+        address: form.address,
+        suburb: form.suburb,
+        city: form.city,
+        phone: form.phone,
+        email: form.email,
+        mcaz_license: form.mcazLicense,
+        is_open_24h: form.isOpen24h,
+        operating_hours: hours,
+      });
+      toast({ title: 'Profile updated', description: 'Your pharmacy details have been saved.' });
+    } catch (error: any) {
+      toast({ title: 'Error', description: error.response?.data?.error || 'Failed to save profile.' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+
+  if (isLoading) {
+    return (
+      <div className="py-16">
+        <LoadingSpinner size="lg" label="Loading profile..." />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl">
@@ -207,7 +276,7 @@ const PharmacyProfilePage = () => {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Status:</span>
-              <span className="badge-approved">Approved</span>
+              <span className="badge-approved">{pharmacy?.status || 'PENDING'}</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-sm text-muted-foreground">Plan:</span>
@@ -220,7 +289,7 @@ const PharmacyProfilePage = () => {
                   textShadow: '0 1px 1px rgba(0,0,0,0.2)',
                 }}
               >
-                BASIC
+                {pharmacy?.plan_tier || 'FREE'}
               </span>
             </div>
           </div>
@@ -229,9 +298,9 @@ const PharmacyProfilePage = () => {
 
       {/* Save */}
       <div className="flex gap-3 pt-2">
-        <Button onClick={handleSave} className="gap-2">
+        <Button onClick={handleSave} className="gap-2" disabled={isSaving}>
           <Save className="w-4 h-4" />
-          Save Changes
+          {isSaving ? 'Saving...' : 'Save Changes'}
         </Button>
       </div>
     </div>
