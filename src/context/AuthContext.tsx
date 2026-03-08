@@ -226,6 +226,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       pharmacy, token, isLoading,
       login, logout,
       isApproved: pharmacy?.status === 'APPROVED',
+      isAdmin: pharmacy?.role === 'admin',
     }}>
       {children}
     </AuthContext.Provider>
