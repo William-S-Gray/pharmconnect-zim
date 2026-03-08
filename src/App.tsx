@@ -43,6 +43,8 @@ const App = () => (
               <Route index element={<PharmacyDashboard />} />
               <Route path="stock" element={<StockManagementPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
+              <Route path="alerts" element={<AlertSettingsPage />} />
+              <Route path="profile" element={<PharmacyProfilePage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
