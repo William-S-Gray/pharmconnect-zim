@@ -223,7 +223,6 @@ OUT_OF_STOCK: quantity = 0 OR is_available = false
 | **BASIC** | $29/mo | 500 | ✅ | Basic | ❌ | ❌ |
 | **PRO** | $79/mo | Unlimited | ✅ | Full | ✅ | ✅ |
 
----
 
 ## 🎨 Design System
 
