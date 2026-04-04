@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { KeyRound, ArrowLeft, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const ResetPasswordPage = () => {
@@ -29,15 +29,12 @@ const ResetPasswordPage = () => {
 
     try {
       setIsLoading(true);
-      await api.post('/api/auth/reset-password', { token, password });
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
       setIsSuccess(true);
       toast.success('Password has been reset successfully');
     } catch (error: any) {
-      const msg = error.response?.data?.error || 'Failed to reset password. The link may have expired.';
-      toast.error(msg);
-      if (error.response?.status === 400 || error.response?.status === 410) {
-        setIsValidToken(false);
-      }
+      toast.error(error.message || 'Failed to reset password. The link may have expired.');
     } finally {
       setIsLoading(false);
     }

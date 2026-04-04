@@ -1,11 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import api from '../lib/api';
-import { rateLimiter } from '../lib/rateLimiter';
-import { refreshCsrfToken, clearCsrfToken } from '../lib/csrfToken';
-import { sessionTimeout } from '../lib/sessionTimeout';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { toast } from 'sonner';
 
-export type UserRole = 'pharmacy' | 'admin';
+export type UserRole = 'super_admin' | 'pharmacy_admin' | 'pharmacy_staff';
 
 export interface Pharmacy {
   id: string;
@@ -16,217 +13,157 @@ export interface Pharmacy {
   suburb: string;
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
-  role?: UserRole;
+  lat?: number;
+  lng?: number;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  full_name: string;
+  global_role: UserRole;
+}
+
+export interface AuthUser {
+  id: string;
+  email?: string;
 }
 
 interface AuthContextType {
   pharmacy: Pharmacy | null;
-  token: string | null;
+  user: AuthUser | null;
+  profile: UserProfile | null;
+  role: UserRole | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
   isApproved: boolean;
-  isAdmin: boolean;
+  isSuperAdmin: boolean;
+  isPharmacyAdmin: boolean;
+  isPharmacyStaff: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-/** 30 minutes inactivity timeout */
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
-function isValidPharmacy(data: unknown): data is Pharmacy {
-  if (!data || typeof data !== 'object') return false;
-  const obj = data as Record<string, unknown>;
-  return (
-    typeof obj.id === 'string' &&
-    typeof obj.name === 'string' &&
-    typeof obj.email === 'string' &&
-    typeof obj.status === 'string' &&
-    ['PENDING', 'APPROVED', 'SUSPENDED'].includes(obj.status as string) &&
-    typeof obj.plan_tier === 'string' &&
-    ['FREE', 'BASIC', 'PRO'].includes(obj.plan_tier as string)
-  );
-}
-
-function sanitizeString(str: string): string {
-  return str.replace(/[<>"'&]/g, '');
-}
-
-function sanitizePharmacy(p: Pharmacy): Pharmacy {
-  return {
-    ...p,
-    id: sanitizeString(p.id),
-    name: sanitizeString(p.name),
-    email: sanitizeString(p.email),
-    phone: sanitizeString(p.phone),
-    city: sanitizeString(p.city),
-    suburb: sanitizeString(p.suburb),
-  };
-}
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [pharmacy, setPharmacy] = useState<Pharmacy | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setLoading] = useState(true);
 
-  // Logout handler (stable reference for session timeout)
+  const fetchFullProfile = useCallback(async (userId: string) => {
+    if (!isSupabaseConfigured) return;
+    
+    try {
+      // 1. Fetch Global Profile
+      const { data: profileData, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+      
+      if (profileError) throw profileError;
+      setProfile(profileData as UserProfile);
+      
+      // 2. Fetch Membership & Pharmacy
+      const { data: membershipData, error: memberError } = await supabase
+        .from('memberships')
+        .select(`
+          role,
+          pharmacy_id,
+          pharmacies (*)
+        `)
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (memberError) console.error('Membership fetch error:', memberError);
+      
+      if (membershipData) {
+        setPharmacy(membershipData.pharmacies as unknown as Pharmacy);
+        // If they have a pharmacy role, it overrides global_role for UI purposes if needed
+        // but usually we rely on the specific table they are in.
+        setRole(membershipData.role as UserRole);
+      } else {
+        setRole(profileData.global_role as UserRole);
+      }
+
+    } catch (error) {
+      console.error('Error fetching full profile:', error);
+    }
+  }, []);
+
   const performLogout = useCallback((showMessage = false) => {
-    localStorage.removeItem('pharmtrack_token');
-    localStorage.removeItem('pharmtrack_pharmacy');
-    localStorage.removeItem('pharmtrack_last_activity');
-    setToken(null);
+    if (isSupabaseConfigured) {
+      supabase.auth.signOut();
+    }
+    
     setPharmacy(null);
-    rateLimiter.clearAll();
-    clearCsrfToken();
-    sessionTimeout.stop();
+    setUser(null);
+    setProfile(null);
+    setRole(null);
 
     if (showMessage) {
-      toast.info('You have been logged out due to inactivity.');
-      // Small delay to let toast show before redirect
+      toast.info('You have been logged out.');
       setTimeout(() => {
         window.location.href = '/pharmacy/login';
       }, 1500);
     }
   }, []);
 
-  // Start session timeout when user is authenticated
-  const startSessionMonitoring = useCallback(() => {
-    sessionTimeout.start(
-      () => performLogout(true), // Auto-logout on timeout
-      {
-        timeoutMs: SESSION_TIMEOUT_MS,
-        onWarning: () => {
-          toast.warning('Your session will expire in 2 minutes due to inactivity.', {
-            duration: 10000,
-            action: {
-              label: 'Stay logged in',
-              onClick: () => sessionTimeout.recordActivity(),
-            },
-          });
-        },
-      }
-    );
-  }, [performLogout]);
-
-  // Restore session with validation
+  // Handle Auth State Changes
   useEffect(() => {
-    try {
-      const storedToken = localStorage.getItem('pharmtrack_token');
-      const storedPharmacy = localStorage.getItem('pharmtrack_pharmacy');
-      if (storedToken && storedPharmacy) {
-        const parsed = JSON.parse(storedPharmacy);
-        if (isValidPharmacy(parsed)) {
-          setToken(storedToken);
-          setPharmacy(sanitizePharmacy(parsed));
-        } else {
-          localStorage.removeItem('pharmtrack_token');
-          localStorage.removeItem('pharmtrack_pharmacy');
-        }
-      }
-    } catch {
-      localStorage.removeItem('pharmtrack_token');
-      localStorage.removeItem('pharmtrack_pharmacy');
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
-  }, []);
 
-  // Monitor session timeout whenever auth state changes
-  useEffect(() => {
-    if (pharmacy && token) {
-      startSessionMonitoring();
-    } else {
-      sessionTimeout.stop();
-    }
-    return () => sessionTimeout.stop();
-  }, [pharmacy, token, startSessionMonitoring]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session) {
+        setUser(session.user);
+        await fetchFullProfile(session.user.id);
+      } else {
+        setUser(null);
+        setPharmacy(null);
+        setProfile(null);
+        setRole(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchFullProfile]);
 
   const login = useCallback(async (email: string, password: string) => {
-    if (email.length > 254 || password.length > 128) {
-      throw new Error('Invalid credentials format');
+    if (!isSupabaseConfigured) {
+      throw new Error('Supabase not configured. Please check your .env file.');
     }
 
-    // Demo admin mode
-    if (email === 'admin@pharmtrack.co.zw' && password === 'admin1234') {
-      const demoAdmin: Pharmacy = {
-        id: 'admin-001',
-        name: 'PharmTrack Admin',
-        email: 'admin@pharmtrack.co.zw',
-        phone: '',
-        city: 'Harare',
-        suburb: '',
-        status: 'APPROVED',
-        plan_tier: 'PRO',
-        role: 'admin',
-      };
-      const demoToken = 'demo-token-admin';
-      localStorage.setItem('pharmtrack_token', demoToken);
-      localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(demoAdmin));
-      setToken(demoToken);
-      setPharmacy(demoAdmin);
-      rateLimiter.reset('/api/auth/login');
-      refreshCsrfToken();
-      return;
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (error) throw error;
+    
+    if (data.user) {
+      setUser(data.user);
+      await fetchFullProfile(data.user.id);
     }
-
-    // Demo pharmacy mode
-    if (email === 'demo@pharmtrack.co.zw' && password === 'demo1234') {
-      const demoPharmacy: Pharmacy = {
-        id: 'demo-001',
-        name: 'HealthPlus Pharmacy',
-        email: 'demo@pharmtrack.co.zw',
-        phone: '0771 234 567',
-        city: 'Harare',
-        suburb: 'Avondale',
-        status: 'APPROVED',
-        plan_tier: 'PRO',
-        role: 'pharmacy',
-      };
-      const demoToken = 'demo-token-pharmtrack';
-      localStorage.setItem('pharmtrack_token', demoToken);
-      localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(demoPharmacy));
-      setToken(demoToken);
-      setPharmacy(demoPharmacy);
-      rateLimiter.reset('/api/auth/login');
-      refreshCsrfToken();
-      return;
-    }
-
-    const response = await api.post('/api/auth/login', { email, password });
-    const { token: newToken, pharmacy: newPharmacy } = response.data;
-
-    if (!isValidPharmacy(newPharmacy)) {
-      throw new Error('Invalid server response');
-    }
-
-    const sanitized = sanitizePharmacy(newPharmacy);
-
-    // If server uses httpOnly cookies, store marker instead of raw token
-    const authMode = response.headers['x-auth-mode'];
-    if (authMode === 'cookie') {
-      localStorage.setItem('pharmtrack_token', 'httponly');
-    } else {
-      localStorage.setItem('pharmtrack_token', newToken);
-    }
-
-    localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(sanitized));
-    setToken(authMode === 'cookie' ? 'httponly' : newToken);
-    setPharmacy(sanitized);
-    rateLimiter.reset('/api/auth/login');
-    refreshCsrfToken();
-  }, []);
+  }, [fetchFullProfile]);
 
   const logout = useCallback(() => {
-    // Tell server to clear httpOnly cookie
-    api.post('/api/auth/logout').catch(() => {});
     performLogout(false);
   }, [performLogout]);
 
   return (
     <AuthContext.Provider value={{
-      pharmacy, token, isLoading,
+      pharmacy, user, profile, role, isLoading,
       login, logout,
       isApproved: pharmacy?.status === 'APPROVED',
-      isAdmin: pharmacy?.role === 'admin',
+      isSuperAdmin: role === 'super_admin',
+      isPharmacyAdmin: role === 'pharmacy_admin',
+      isPharmacyStaff: role === 'pharmacy_staff',
     }}>
       {children}
     </AuthContext.Provider>
@@ -238,3 +175,5 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
 };
+
+

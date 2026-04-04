@@ -1,12 +1,15 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { PersistentAlertList } from '@/components/PersistentAlertList';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Stock Management', icon: Package, path: '/dashboard/stock' },
+  { label: 'Requested Drugs', icon: MessageCircle, path: '/dashboard/requests' },
+  { label: 'Inventory', icon: Package, path: '/dashboard/stock' },
+  { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
@@ -16,7 +19,7 @@ const navItems = [
 export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { pharmacy, logout } = useAuth();
+  const { pharmacy, role, logout } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -39,12 +42,17 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
         <div className="px-3 py-4">
           <div className="card-pharma mb-4 p-3">
             <p className="font-heading font-semibold text-sm truncate text-foreground">{pharmacy?.name || 'Pharmacy'}</p>
-            <span className="badge-approved text-[10px] mt-1">{pharmacy?.status || 'PENDING'}</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="badge-approved text-[10px]">{pharmacy?.status || 'PENDING'}</span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-tighter font-bold">
+                {role === 'pharmacy_admin' ? 'Admin' : 'Staff'}
+              </span>
+            </div>
           </div>
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
-          {navItems.map((item) => {
+          {navItems.filter(item => !item.adminOnly || role === 'pharmacy_admin').map((item) => {
             const isActive = location.pathname === item.path;
             return (
               <Link
@@ -77,7 +85,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border mobile-nav-skeu">
-        {navItems.slice(0, 4).map((item) => {
+        {navItems.filter(item => !item.adminOnly || role === 'pharmacy_admin').slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path;
           return (
             <Link
@@ -96,8 +104,9 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
       </nav>
 
       {/* Main content */}
-      <main className="flex-1 md:ml-60 pb-20 md:pb-0">
-        <div className="p-4 md:p-8">
+      <main className="flex-1 md:ml-60 pb-20 md:pb-0 scroll-smooth">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+          <PersistentAlertList />
           {children}
           <Outlet />
         </div>

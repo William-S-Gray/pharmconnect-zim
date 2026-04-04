@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { getCATGreeting, formatCATTime } from '@/lib/catTime';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const PharmacyDashboard = () => {
@@ -23,8 +23,57 @@ const PharmacyDashboard = () => {
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats', pharmacy?.id],
-    queryFn: () => api.get('/api/dashboard/stats').then(r => r.data),
-    enabled: !!pharmacy,
+    queryFn: async () => {
+      if (!isSupabaseConfigured || !pharmacy?.id) return null;
+      
+      // 1. Total Drugs Listed
+      const { count: totalCount } = await supabase
+        .from('pharmacy_stock')
+        .select('*', { count: 'exact', head: true })
+        .eq('pharmacy_id', pharmacy.id);
+
+      // 2. Low Stock Items
+      const { data: stockItems } = await supabase
+        .from('pharmacy_stock')
+        .select('quantity, threshold')
+        .eq('pharmacy_id', pharmacy.id);
+      
+      const lowStockCount = (stockItems || []).filter(s => s.quantity <= s.threshold).length;
+
+      // 3. System-wide Trending Searches (Filtered by City)
+      const { data: trending } = await supabase
+        .from('drug_searches')
+        .select('query, result_count')
+        .eq('city', pharmacy.city)
+        .order('created_at', { ascending: false })
+        .limit(30);
+
+      // Aggregate trending queries
+      const queryCounts: Record<string, number> = {};
+      trending?.forEach(t => {
+        queryCounts[t.query] = (queryCounts[t.query] || 0) + 1;
+      });
+
+      const topSearchedDrugs = Object.entries(queryCounts)
+        .map(([query, count]) => ({ common_name: query, search_count: count }))
+        .sort((a, b) => b.search_count - a.search_count)
+        .slice(0, 5);
+
+      // 4. Searches this month for this pharmacy (simplified proxy - total searches in their city)
+      const { count: searchesInCity } = await supabase
+        .from('drug_searches')
+        .select('*', { count: 'exact', head: true })
+        .eq('city', pharmacy.city);
+
+      return {
+        searches_this_month: searchesInCity || 0,
+        stock: { total: totalCount || 0, low_stock: lowStockCount },
+        plan_tier: pharmacy.plan_tier,
+        top_searched_drugs: topSearchedDrugs,
+        recent_alerts: [] // To be implemented with alert history table
+      };
+    },
+    enabled: !!pharmacy?.id && isSupabaseConfigured,
   });
 
   if (isLoading) {
@@ -47,6 +96,7 @@ const PharmacyDashboard = () => {
 
   return (
     <div className="space-y-6 animate-fade-in">
+
       <div>
         <h1 className="font-heading font-bold text-2xl text-foreground">
           {greeting}, {pharmacy?.name || 'Pharmacy'} 👋
@@ -145,3 +195,4 @@ const PharmacyDashboard = () => {
 };
 
 export default PharmacyDashboard;
+

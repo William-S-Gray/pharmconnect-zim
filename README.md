@@ -314,12 +314,12 @@ npm run preview
 
 ## 🔮 Roadmap
 
-- [ ] Connect Supabase / Lovable Cloud backend (database, auth, RLS)
-- [ ] Google Maps integration for pharmacy markers
+- [x] Connect Supabase backend (database, auth, RLS)
+- [x] Google Maps integration for pharmacy markers
 - [ ] SMS alerts via Africa's Talking API (Edge Function)
 - [ ] Paynow payment integration for subscriptions
-- [ ] WhatsApp bot for drug search
-- [ ] PWA support for offline access
+- [x] WhatsApp integration (Click-to-Chat)
+- [x] PWA support for offline access
 - [ ] Role-based admin hierarchy (super admin, regional admin)
 
 ---

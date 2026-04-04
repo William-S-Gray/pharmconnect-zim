@@ -11,17 +11,17 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 
 interface Drug {
   id: string;
-  name: string;
+  common_name: string;
   generic_name: string;
   category: string;
-  dosage_form: string;
+  form: string;
   strength: string;
 }
 
@@ -29,7 +29,7 @@ const categories = ['Analgesic', 'Antibiotic', 'Antidiabetic', 'Antihypertensive
 const dosageForms = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Ointment', 'Drops', 'Suspension'];
 
 type DrugForm = Omit<Drug, 'id'>;
-const emptyDrug: DrugForm = { name: '', generic_name: '', category: '', dosage_form: '', strength: '' };
+const emptyDrug: DrugForm = { common_name: '', generic_name: '', category: '', form: '', strength: '' };
 
 const AdminDrugsPage = () => {
   const queryClient = useQueryClient();
@@ -43,56 +43,73 @@ const AdminDrugsPage = () => {
   const { data: drugs = [], isLoading } = useQuery<Drug[]>({
     queryKey: ['admin', 'drugs', catFilter],
     queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (catFilter !== 'ALL') params.category = catFilter;
-      const res = await api.get('/api/admin/drugs', { params });
-      return res.data;
+      let query = supabase
+        .from('drugs')
+        .select('*');
+      
+      if (catFilter !== 'ALL') query = query.eq('category', catFilter);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as Drug[];
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: { id?: string; drug: DrugForm }) => {
       if (data.id) {
-        return api.put(`/api/admin/drugs/${data.id}`, data.drug);
+        const { error } = await supabase
+          .from('drugs')
+          .update(data.drug)
+          .eq('id', data.id);
+        if (error) throw error;
+        return;
       }
-      return api.post('/api/admin/drugs', data.drug);
+      const { error } = await supabase
+        .from('drugs')
+        .insert([data.drug]);
+      if (error) throw error;
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.success(vars.id ? 'Drug updated' : 'Drug added to database');
       setShowEditor(false);
     },
-    onError: () => toast.error('Failed to save drug'),
+    onError: (error: any) => toast.error(error.message || 'Failed to save drug'),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/admin/drugs/${id}`),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('drugs')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.success('Drug removed from database');
       setShowDeleteConfirm(null);
     },
-    onError: () => toast.error('Failed to delete drug'),
+    onError: (error: any) => toast.error(error.message || 'Failed to delete drug'),
   });
 
   const openAdd = () => { setEditingDrug(null); setForm(emptyDrug); setShowEditor(true); };
   const openEdit = (drug: Drug) => {
     setEditingDrug(drug);
-    setForm({ name: drug.name, generic_name: drug.generic_name, category: drug.category, dosage_form: drug.dosage_form, strength: drug.strength });
+    setForm({ common_name: drug.common_name, generic_name: drug.generic_name, category: drug.category, form: drug.form, strength: drug.strength });
     setShowEditor(true);
   };
 
   const handleSave = () => {
-    if (!form.name || !form.generic_name || !form.category || !form.dosage_form) {
+    if (!form.common_name || !form.generic_name || !form.category || !form.form) {
       toast.error('Please fill all required fields'); return;
     }
     saveMutation.mutate({ id: editingDrug?.id, drug: form });
   };
 
   const filtered = drugs.filter(d => {
-    return !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
+    return !search || d.common_name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
   });
 
   const pagination = usePagination(filtered, { defaultPageSize: 20 });
@@ -107,8 +124,8 @@ const AdminDrugsPage = () => {
         <div className="flex gap-2">
           <ExportDropdown
             disabled={!filtered.length}
-            onCSV={() => exportCSV(filtered.map(d => ({ Name: d.name, 'Generic Name': d.generic_name, Category: d.category, 'Dosage Form': d.dosage_form, Strength: d.strength })), 'drug-database')}
-            onExcel={() => exportExcel(filtered.map(d => ({ Name: d.name, 'Generic Name': d.generic_name, Category: d.category, 'Dosage Form': d.dosage_form, Strength: d.strength })), 'drug-database', 'Drugs')}
+            onCSV={() => exportCSV(filtered.map(d => ({ Name: d.common_name, 'Generic Name': d.generic_name, Category: d.category, Form: d.form, Strength: d.strength })), 'drug-database')}
+            onExcel={() => exportExcel(filtered.map(d => ({ Name: d.common_name, 'Generic Name': d.generic_name, Category: d.category, Form: d.form, Strength: d.strength })), 'drug-database', 'Drugs')}
           />
           <Button onClick={openAdd} className="gap-2"><Plus className="w-4 h-4" /> Add Drug</Button>
         </div>
@@ -148,10 +165,10 @@ const AdminDrugsPage = () => {
               <tbody>
                   {pagination.paginatedItems.map((d) => (
                     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                      <td className="p-3 font-medium text-foreground">{d.name}</td>
+                      <td className="p-3 font-medium text-foreground">{d.common_name}</td>
                       <td className="p-3 text-muted-foreground">{d.generic_name}</td>
                       <td className="p-3 hidden sm:table-cell"><Badge variant="outline" className="text-xs">{d.category}</Badge></td>
-                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.dosage_form}</td>
+                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.form}</td>
                       <td className="p-3 text-muted-foreground hidden md:table-cell">{d.strength}</td>
                       <td className="p-3 text-right">
                         <div className="flex justify-end gap-1">
@@ -187,7 +204,7 @@ const AdminDrugsPage = () => {
           <DialogHeader><DialogTitle>{editingDrug ? 'Edit Drug' : 'Add New Drug'}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2"><Label>Brand Name *</Label><Input value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} /></div>
+              <div className="space-y-2"><Label>Common Name *</Label><Input value={form.common_name} onChange={(e) => setForm(f => ({ ...f, common_name: e.target.value }))} /></div>
               <div className="space-y-2"><Label>Generic Name *</Label><Input value={form.generic_name} onChange={(e) => setForm(f => ({ ...f, generic_name: e.target.value }))} /></div>
             </div>
             <div className="grid grid-cols-3 gap-3">
@@ -200,7 +217,7 @@ const AdminDrugsPage = () => {
               </div>
               <div className="space-y-2">
                 <Label>Form *</Label>
-                <Select value={form.dosage_form} onValueChange={(v) => setForm(f => ({ ...f, dosage_form: v }))}>
+                <Select value={form.form} onValueChange={(v) => setForm(f => ({ ...f, form: v }))}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>{dosageForms.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
                 </Select>

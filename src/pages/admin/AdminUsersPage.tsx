@@ -12,7 +12,7 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -72,72 +72,125 @@ const AdminUsersPage = () => {
   const { data: users = [], isLoading } = useQuery<PharmacyUser[]>({
     queryKey: ['admin', 'users', statusFilter, planFilter],
     queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (statusFilter !== 'ALL') params.status = statusFilter;
-      if (planFilter !== 'ALL') params.plan_tier = planFilter;
-      const res = await api.get('/api/admin/users', { params });
-      return res.data;
+      let query = supabase
+        .from('pharmacies')
+        .select('*');
+      
+      if (statusFilter !== 'ALL') query = query.eq('status', statusFilter);
+      if (planFilter !== 'ALL') query = query.eq('plan_tier', planFilter);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      // Fetch drug counts for each pharmacy
+      const { data: stockCounts } = await supabase
+        .from('pharmacy_stock')
+        .select('pharmacy_id');
+        
+      const counts: Record<string, number> = {};
+      stockCounts?.forEach(s => {
+        counts[s.pharmacy_id] = (counts[s.pharmacy_id] || 0) + 1;
+      });
+
+      return (data || []).map(p => ({
+        ...p,
+        drug_count: counts[p.id] || 0,
+        joined: p.created_at
+      })) as PharmacyUser[];
     },
   });
 
   const toggleStatusMutation = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.put(`/api/admin/users/${id}/status`, { status }),
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({ status })
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success(`Pharmacy ${vars.status === 'SUSPENDED' ? 'suspended' : 'reactivated'}`);
     },
-    onError: () => toast.error('Failed to update status'),
+    onError: (error: any) => toast.error(error.message || 'Failed to update status'),
   });
 
   const changePlanMutation = useMutation({
-    mutationFn: ({ id, plan_tier }: { id: string; plan_tier: string }) =>
-      api.put(`/api/admin/users/${id}/plan`, { plan_tier }),
+    mutationFn: async ({ id, plan_tier }: { id: string; plan_tier: string }) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({ plan_tier })
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success(`Plan changed to ${newPlan}`);
       setChangePlanUser(null);
     },
-    onError: () => toast.error('Failed to change plan'),
+    onError: (error: any) => toast.error(error.message || 'Failed to change plan'),
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: UserFormData) => api.post('/api/admin/users', data),
+    mutationFn: async (data: UserFormData) => {
+      // In a real production app, you'd use a Supabase Edge Function to create users via Admin API
+      // For now, we advise using the registration page to ensure auth.users is populated
+      throw new Error('Admin user creation must be done via the Pharmacy Registration page for security.');
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success('User created successfully');
       setShowCreate(false);
       setFormData(emptyForm);
     },
-    onError: () => toast.error('Failed to create user'),
+    onError: (error: any) => toast.error(error.message || 'Failed to create user'),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<UserFormData> }) =>
-      api.put(`/api/admin/users/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: Partial<UserFormData> }) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          city: data.city,
+          suburb: data.suburb,
+          status: data.status,
+          plan_tier: data.plan_tier
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success('User updated successfully');
       setEditUser(null);
     },
-    onError: () => toast.error('Failed to update user'),
+    onError: (error: any) => toast.error(error.message || 'Failed to update user'),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/api/admin/users/${id}`),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       toast.success('User deleted successfully');
       setDeleteUser(null);
     },
-    onError: () => toast.error('Failed to delete user'),
+    onError: (error: any) => toast.error(error.message || 'Failed to delete user'),
   });
 
   const filtered = users.filter(u =>
     !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.email.toLowerCase().includes(search.toLowerCase())
   );
 
-  const pagination = usePagination(filtered, { defaultPageSize: 10 });
+  const pagination = usePagination<PharmacyUser>(filtered, { defaultPageSize: 10 });
 
   const statusBadge = (status: string) => {
     switch (status) {

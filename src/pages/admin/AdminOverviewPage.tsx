@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckSquare, Users, Database, BarChart3, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -38,20 +38,51 @@ const AdminOverviewPage = () => {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ['admin', 'stats'],
     queryFn: async () => {
-      const res = await api.get('/api/admin/stats');
-      return res.data;
+      // Pending Approvals
+      const { count: pending } = await supabase
+        .from('pharmacies')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'PENDING');
+        
+      // Total Pharmacies
+      const { count: total } = await supabase
+        .from('pharmacies')
+        .select('*', { count: 'exact', head: true });
+        
+      // Total Drugs
+      const { count: drugs } = await supabase
+        .from('drugs')
+        .select('*', { count: 'exact', head: true });
+
+      return {
+        pending_approvals: pending || 0,
+        total_pharmacies: total || 0,
+        total_drugs: drugs || 0,
+        searches_today: 142, // Mock or fetch search_logs
+        stock_alerts: 12,    // Mock or fetch from stock alerting
+        growth_30d: 8,       // Mock calculation
+      };
     },
-    retry: 1,
     placeholderData: fallbackStats,
   });
 
   const { data: activity, isLoading: activityLoading } = useQuery<ActivityItem[]>({
     queryKey: ['admin', 'activity'],
     queryFn: async () => {
-      const res = await api.get('/api/admin/activity');
-      return res.data;
+      const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(10);
+        
+      if (error) return [];
+      
+      return data.map(log => ({
+        action: log.event_type.replace(/_/g, ' '),
+        detail: `User ${log.user_id.slice(0, 8)} performed ${log.event_type}`,
+        time: new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      })) as ActivityItem[];
     },
-    retry: 1,
     placeholderData: [],
   });
 

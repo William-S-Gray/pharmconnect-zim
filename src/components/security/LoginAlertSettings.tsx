@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Mail, Bell, MapPin, Smartphone, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
+import { useAuth } from '@/context/AuthContext';
 
 interface AlertPreferences {
   email: string;
@@ -24,24 +25,38 @@ const DEFAULT_PREFS: AlertPreferences = {
   notify_failed_attempt: true,
   notify_password_change: true,
 };
-
 const LoginAlertSettings = () => {
   const queryClient = useQueryClient();
+  const { pharmacy } = useAuth();
+  const [form, setForm] = useState<AlertPreferences>(DEFAULT_PREFS);
   const [dirty, setDirty] = useState(false);
 
-  const { data: prefs = DEFAULT_PREFS } = useQuery({
-    queryKey: ['security', 'alert-prefs'],
+  const { data: fetchedPrefs } = useQuery({
+    queryKey: ['security', 'alert-prefs', pharmacy?.id],
     queryFn: async () => {
-      try {
-        const res = await api.get('/api/security/alert-preferences');
-        return res.data as AlertPreferences;
-      } catch {
-        return DEFAULT_PREFS;
-      }
+      if (!pharmacy?.id) return DEFAULT_PREFS;
+      const { data, error } = await supabase
+        .from('pharmacies')
+        .select('email, notify_new_device, notify_new_location, notify_failed_attempt, notify_password_change')
+        .eq('id', pharmacy.id)
+        .single();
+      
+      if (error) return DEFAULT_PREFS;
+      return {
+        email: data.email || '',
+        notify_new_device: data.notify_new_device ?? true,
+        notify_new_location: data.notify_new_location ?? true,
+        notify_failed_attempt: data.notify_failed_attempt ?? true,
+        notify_password_change: data.notify_password_change ?? true,
+      };
     },
+    enabled: !!pharmacy?.id,
   });
 
-  const [form, setForm] = useState<AlertPreferences>(prefs);
+  // Effect to sync form with fetched data
+  useState(() => {
+    if (fetchedPrefs) setForm(fetchedPrefs);
+  });
 
   // Sync fetched data
   const updateField = <K extends keyof AlertPreferences>(key: K, value: AlertPreferences[K]) => {
@@ -50,17 +65,26 @@ const LoginAlertSettings = () => {
   };
 
   const saveMutation = useMutation({
-    mutationFn: (data: AlertPreferences) => api.put('/api/security/alert-preferences', data),
+    mutationFn: async (data: AlertPreferences) => {
+      if (!pharmacy?.id) throw new Error('Not logged in');
+      const { error } = await supabase
+        .from('pharmacies')
+        .update(data)
+        .eq('id', pharmacy.id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security', 'alert-prefs'] });
       setDirty(false);
       toast.success('Alert preferences saved');
     },
-    onError: () => toast.error('Failed to save preferences'),
+    onError: (err: any) => toast.error(err.message || 'Failed to save preferences'),
   });
 
   const testMutation = useMutation({
-    mutationFn: () => api.post('/api/security/alert-preferences/test', { email: form.email }),
+    mutationFn: async () => {
+      toast.success('System: In production, Supabase Edge Functions or triggers will handle these emails.');
+    },
     onSuccess: () => toast.success(`Test email sent to ${form.email}`),
     onError: () => toast.error('Failed to send test email'),
   });

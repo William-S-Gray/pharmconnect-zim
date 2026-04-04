@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
@@ -53,24 +53,30 @@ const PharmacyProfilePage = () => {
         isOpen24h: false,
       });
       setIsLoading(true);
-      api.get('/api/pharmacy/profile')
-        .then(res => {
-          const p = res.data;
-          setForm({
-            name: p.name || pharmacy.name || '',
-            address: p.address || '',
-            suburb: p.suburb || pharmacy.suburb || '',
-            city: p.city || pharmacy.city || 'Harare',
-            phone: p.phone || pharmacy.phone || '',
-            email: p.email || pharmacy.email || '',
-            mcazLicense: p.mcaz_license || '',
-            isOpen24h: p.is_open_24h || false,
-          });
-          if (p.operating_hours) {
-            setHours(p.operating_hours);
+      supabase
+        .from('pharmacies')
+        .select('*')
+        .eq('id', pharmacy.id)
+        .single()
+        .then(({ data: p, error }) => {
+          if (error) throw error;
+          if (p) {
+            setForm({
+              name: p.name || pharmacy.name || '',
+              address: p.address || '',
+              suburb: p.suburb || pharmacy.suburb || '',
+              city: p.city || pharmacy.city || 'Harare',
+              phone: p.phone || pharmacy.phone || '',
+              email: p.email || pharmacy.email || '',
+              mcazLicense: p.mcaz_license || '',
+              isOpen24h: p.is_open_24h || false,
+            });
+            if (p.operating_hours) {
+              setHours(p.operating_hours as any);
+            }
           }
         })
-        .catch(() => {})
+        .catch((err) => console.error('Profile fetch error:', err))
         .finally(() => setIsLoading(false));
     }
   }, [pharmacy]);
@@ -88,21 +94,26 @@ const PharmacyProfilePage = () => {
 
   const handleSave = async () => {
     try {
+      if (!pharmacy?.id) return;
       setIsSaving(true);
-      await api.put('/api/pharmacy/profile', {
-        name: form.name,
-        address: form.address,
-        suburb: form.suburb,
-        city: form.city,
-        phone: form.phone,
-        email: form.email,
-        mcaz_license: form.mcazLicense,
-        is_open_24h: form.isOpen24h,
-        operating_hours: hours,
-      });
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({
+          name: form.name,
+          address: form.address,
+          suburb: form.suburb,
+          city: form.city,
+          phone: form.phone,
+          mcaz_license: form.mcazLicense,
+          is_open_24h: form.isOpen24h,
+          operating_hours: hours,
+        })
+        .eq('id', pharmacy.id);
+        
+      if (error) throw error;
       toast({ title: 'Profile updated', description: 'Your pharmacy details have been saved.' });
     } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.error || 'Failed to save profile.' });
+      toast({ title: 'Error', description: error.message || 'Failed to save profile.' });
     } finally {
       setIsSaving(false);
     }
@@ -296,11 +307,14 @@ const PharmacyProfilePage = () => {
               if (!isPasswordValid(passwordForm.newPass)) { toast({ title: 'Error', description: 'Password does not meet all requirements' }); return; }
               try {
                 setIsChangingPassword(true);
-                await api.put('/api/auth/change-password', { current_password: passwordForm.current, new_password: passwordForm.newPass });
+                const { error } = await supabase.auth.updateUser({
+                  password: passwordForm.newPass
+                });
+                if (error) throw error;
                 toast({ title: 'Password changed', description: 'Your password has been updated successfully.' });
                 setPasswordForm({ current: '', newPass: '', confirm: '' });
               } catch (error: any) {
-                toast({ title: 'Error', description: error.response?.data?.error || 'Failed to change password.' });
+                toast({ title: 'Error', description: error.message || 'Failed to change password.' });
               } finally {
                 setIsChangingPassword(false);
               }

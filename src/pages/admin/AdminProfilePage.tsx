@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { Shield, User, Lock, Bell, Save } from 'lucide-react';
 
 const AdminProfilePage = () => {
@@ -38,10 +38,20 @@ const AdminProfilePage = () => {
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
-      await api.put('/api/admin/profile', profile);
+      if (!pharmacy?.id) throw new Error('Not logged in');
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({
+          name: profile.name,
+          phone: profile.phone,
+          email: profile.email
+        })
+        .eq('id', pharmacy.id);
+      
+      if (error) throw error;
       toast.success('Profile updated successfully');
-    } catch {
-      toast.error('Failed to update profile');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to update profile');
     } finally {
       setIsSaving(false);
     }
@@ -52,20 +62,20 @@ const AdminProfilePage = () => {
       toast.error('New passwords do not match');
       return;
     }
-    if (passwords.newPassword.length < 8) {
-      toast.error('Password must be at least 8 characters');
+    if (passwords.newPassword.length < 6) {
+      toast.error('Password must be at least 6 characters');
       return;
     }
     setIsChangingPassword(true);
     try {
-      await api.put('/api/admin/password', {
-        currentPassword: passwords.current,
-        newPassword: passwords.newPassword,
+      const { error } = await supabase.auth.updateUser({
+        password: passwords.newPassword
       });
+      if (error) throw error;
       toast.success('Password changed successfully');
       setPasswords({ current: '', newPassword: '', confirm: '' });
-    } catch {
-      toast.error('Failed to change password');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to change password');
     } finally {
       setIsChangingPassword(false);
     }
@@ -73,10 +83,17 @@ const AdminProfilePage = () => {
 
   const handleSaveNotifications = async () => {
     try {
-      await api.put('/api/admin/notifications', notifications);
+      if (!pharmacy?.id) throw new Error('Not logged in');
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({
+          metadata: { ...(pharmacy as any)?.metadata, notifications }
+        })
+        .eq('id', pharmacy.id);
+      if (error) throw error;
       toast.success('Notification preferences saved');
-    } catch {
-      toast.error('Failed to save notification preferences');
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save notification preferences');
     }
   };
 

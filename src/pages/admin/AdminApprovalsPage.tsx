@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -41,42 +41,61 @@ const AdminApprovalsPage = () => {
   const { data: pharmacies = [], isLoading } = useQuery<PendingPharmacy[]>({
     queryKey: ['admin', 'pharmacies', filter],
     queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (filter !== 'ALL') params.status = filter;
-      const res = await api.get('/api/admin/pharmacies', { params });
-      return res.data;
+      let query = supabase
+        .from('pharmacies')
+        .select('*');
+      
+      if (filter !== 'ALL') query = query.eq('status', filter);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      return (data || []).map(p => ({
+        ...p,
+        submitted_at: p.created_at // Map created_at to submitted_at for consistency
+      })) as PendingPharmacy[];
     },
   });
 
   const approveMutation = useMutation({
-    mutationFn: (id: string) => api.put(`/api/admin/pharmacies/${id}/approve`),
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({ status: 'APPROVED' })
+        .eq('id', id);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.success('Pharmacy approved successfully');
     },
-    onError: () => toast.error('Failed to approve pharmacy'),
+    onError: (error: any) => toast.error(error.message || 'Failed to approve pharmacy'),
   });
 
   const rejectMutation = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
-      api.put(`/api/admin/pharmacies/${id}/reject`, { reason }),
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({ status: 'SUSPENDED' })
+        .eq('id', id);
+      if (error) throw error;
+      // Note: Rejection reason could be logged to an audit table or sent via email here using an Edge Function
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
       toast.success('Pharmacy rejected');
       setShowRejectDialog(false);
       setRejectReason('');
       setRejectTarget(null);
     },
-    onError: () => toast.error('Failed to reject pharmacy'),
+    onError: (error: any) => toast.error(error.message || 'Failed to reject pharmacy'),
   });
 
   const filtered = pharmacies.filter(p => {
     return !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.email.toLowerCase().includes(search.toLowerCase());
   });
 
-  const pagination = usePagination(filtered, { defaultPageSize: 10 });
+  const pagination = usePagination<PendingPharmacy>(filtered, { defaultPageSize: 10 });
 
   const statusBadge = (status: string) => {
     switch (status) {

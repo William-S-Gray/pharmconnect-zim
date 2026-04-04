@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Pill, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const PharmacyRegisterPage = () => {
@@ -26,33 +26,35 @@ const PharmacyRegisterPage = () => {
     if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
     if (!isPasswordValid(form.password)) { toast.error('Password does not meet all requirements'); return; }
 
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase is not configured. Please check your .env file.');
+      return;
+    }
+
     try {
       setIsLoading(true);
-      await api.post('/api/auth/register', {
-        name: form.name,
-        address: form.address,
-        suburb: form.suburb,
-        city: form.city,
-        phone: form.phone,
+      
+      const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
-        mcaz_license: form.mcazLicense,
-      });
-      toast.success('Registration received! Our team will verify your pharmacy within 24 hours.');
-      navigate('/pharmacy/login');
-    } catch (error: any) {
-      if (error.code === 'ERR_NETWORK' || error.message?.includes('Network Error')) {
-        toast.error('Unable to connect to the server. Please check your internet connection and try again.');
-      } else {
-        const serverMsg = error.response?.data?.error || '';
-        if (serverMsg.toLowerCase().includes('mcaz') || serverMsg.toLowerCase().includes('licence') || serverMsg.toLowerCase().includes('license') || serverMsg.toLowerCase().includes('duplicate')) {
-          toast.error('This MCAZ Licence Number is already registered. Please check your licence number or contact support if you believe this is an error.');
-        } else if (serverMsg.toLowerCase().includes('email')) {
-          toast.error('This email address is already registered. Try signing in instead.');
-        } else {
-          toast.error(serverMsg || 'Registration failed. Please try again later.');
+        options: {
+          data: {
+            name: form.name,
+            city: form.city,
+            mcaz_license: form.mcazLicense,
+            role: 'pharmacy'
+          }
         }
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        toast.success('Registration successful! Please check your email for a confirmation link.');
+        navigate('/pharmacy/login');
       }
+    } catch (error: any) {
+      toast.error(error.message || 'Registration failed. Please try again later.');
     } finally {
       setIsLoading(false);
     }

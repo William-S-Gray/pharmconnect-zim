@@ -15,7 +15,7 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { Search, CalendarIcon, X, Shield, UserCog, Database, LogIn, Trash2, Edit, Plus, Eye } from 'lucide-react';
 import { format } from 'date-fns';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 
 interface AuditEntry {
   id: string;
@@ -73,16 +73,54 @@ const AdminAuditLogPage = () => {
   const { data: auditLog, isLoading } = useQuery<AuditEntry[]>({
     queryKey: ['admin', 'audit-log', categoryFilter, actionFilter, dateFrom?.toISOString(), dateTo?.toISOString()],
     queryFn: async () => {
-      const params: Record<string, string> = {};
-      if (categoryFilter !== 'all') params.category = categoryFilter;
-      if (actionFilter !== 'all') params.action = actionFilter;
-      if (dateFrom) params.from = format(dateFrom, 'yyyy-MM-dd');
-      if (dateTo) params.to = format(dateTo, 'yyyy-MM-dd');
-      const res = await api.get('/api/admin/audit-log', { params });
-      return res.data;
+      let query = supabase
+        .from('audit_logs')
+        .select(`
+          id,
+          created_at,
+          event_type,
+          ip_address,
+          metadata,
+          user_id
+        `)
+        .order('created_at', { ascending: false });
+
+      if (categoryFilter !== 'all') {
+        // Since category isn't a direct column, we might filter in metadata or use event_type mapping
+        // For now, let's assume event_type contains category info or we filter after fetch or map it
+      }
+      
+      if (actionFilter !== 'all') {
+        query = query.ilike('event_type', `%${actionFilter}%`);
+      }
+      
+      if (dateFrom) {
+        query = query.gte('created_at', format(dateFrom, 'yyyy-MM-dd'));
+      }
+      
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        query = query.lte('created_at', end.toISOString());
+      }
+
+      const { data, error } = await query.limit(100);
+      
+      if (error) throw error;
+      
+      return (data || []).map(log => ({
+        id: log.id,
+        timestamp: log.created_at,
+        user_email: (log.metadata as any)?.email || `User ${log.user_id.slice(0, 8)}`,
+        user_role: (log.metadata as any)?.role || 'pharmacy',
+        action: log.event_type.split('_')[0] || 'view',
+        category: (log.metadata as any)?.category || 'system',
+        target: (log.metadata as any)?.target || 'System',
+        detail: (log.metadata as any)?.detail || `Performed ${log.event_type}`,
+        ip_address: log.ip_address || 'Unknown'
+      })) as AuditEntry[];
     },
-    retry: 1,
-    placeholderData: demoAuditLog,
+    placeholderData: [],
   });
 
   const entries = auditLog || demoAuditLog;

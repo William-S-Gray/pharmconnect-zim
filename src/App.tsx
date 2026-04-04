@@ -22,6 +22,8 @@ const AlertSettingsPage = lazy(() => import("./pages/AlertSettingsPage"));
 const PharmacyProfilePage = lazy(() => import("./pages/PharmacyProfilePage"));
 const SecurityAuditPage = lazy(() => import("./pages/SecurityAuditPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
+const PharmacyRequestsPage = lazy(() => import("./pages/PharmacyRequestsPage"));
+const PharmacyApprovalsPage = lazy(() => import("./pages/PharmacyApprovalsPage"));
 
 // Admin pages
 const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
@@ -43,7 +45,12 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter>
+      <BrowserRouter 
+        future={{ 
+          v7_startTransition: true, 
+          v7_relativeSplatPath: true 
+        }}
+      >
         <Suspense fallback={<PageLoading />}>
           <Routes>
             <Route path="/" element={<Index />} />
@@ -58,6 +65,8 @@ const App = () => (
             }>
               <Route index element={<PharmacyDashboard />} />
               <Route path="stock" element={<StockManagementPage />} />
+              <Route path="requests" element={<PharmacyRequestsPage />} />
+              <Route path="approvals" element={<PharmacyApprovalsPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="alerts" element={<AlertSettingsPage />} />
               <Route path="profile" element={<PharmacyProfilePage />} />

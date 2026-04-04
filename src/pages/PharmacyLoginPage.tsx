@@ -7,9 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Pill, Shield, Mail, ArrowLeft, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { MathCaptcha } from '@/components/MathCaptcha';
-import { checkLockout, recordFailedAttempt, resetLockout, formatLockoutTime } from '@/lib/accountLockout';
 
 const PharmacyLoginPage = () => {
   const navigate = useNavigate();
@@ -18,25 +17,7 @@ const PharmacyLoginPage = () => {
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  // Lockout state
-  const [isLockedOut, setIsLockedOut] = useState(false);
-  const [lockoutRemaining, setLockoutRemaining] = useState('');
-  const [failedAttempts, setFailedAttempts] = useState(0);
-
-  const checkCurrentLockout = useCallback(() => {
-    if (!email) { setIsLockedOut(false); return; }
-    const { locked, remainingMs } = checkLockout(email);
-    setIsLockedOut(locked);
-    if (locked) setLockoutRemaining(formatLockoutTime(remainingMs));
-  }, [email]);
-
-  // Re-check lockout when email changes or periodically
-  useEffect(() => {
-    checkCurrentLockout();
-    if (!isLockedOut) return;
-    const interval = setInterval(checkCurrentLockout, 1000);
-    return () => clearInterval(interval);
-  }, [checkCurrentLockout, isLockedOut]);
+  // 2FA state
 
   // 2FA state
   const [requires2FA, setRequires2FA] = useState(false);
@@ -50,6 +31,24 @@ const PharmacyLoginPage = () => {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [captchaVerified, setCaptchaVerified] = useState(false);
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setIsLoading(true);
+      await login(email, password);
+      toast.success('Welcome back!');
+    } catch (error: any) {
+      toast.error(error.message || 'Invalid email or password.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handle2FAVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    // MFA verification logic would go here
+  };
+
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotEmail || !captchaVerified) {
@@ -58,89 +57,17 @@ const PharmacyLoginPage = () => {
     }
     try {
       setForgotLoading(true);
-      await api.post('/api/auth/forgot-password', { email: forgotEmail });
+      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
+        redirectTo: `${window.location.origin}/pharmacy/reset-password`,
+      });
+      if (error) throw error;
       setForgotSent(true);
       toast.success('If that email is registered, a reset link has been sent.');
-    } catch {
-      // Always show success to prevent email enumeration
+    } catch (error: any) {
       setForgotSent(true);
       toast.success('If that email is registered, a reset link has been sent.');
     } finally {
       setForgotLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    // Check lockout before attempting
-    const { locked, remainingMs } = checkLockout(email);
-    if (locked) {
-      setIsLockedOut(true);
-      setLockoutRemaining(formatLockoutTime(remainingMs));
-      toast.error(`Account temporarily locked. Try again in ${formatLockoutTime(remainingMs)}.`);
-      return;
-    }
-    try {
-      setIsLoading(true);
-      await login(email, password);
-      resetLockout(email);
-      setFailedAttempts(0);
-      toast.success('Welcome back!');
-      // Check stored pharmacy for admin role to determine redirect
-      const stored = localStorage.getItem('pharmtrack_pharmacy');
-      const role = stored ? JSON.parse(stored)?.role : null;
-      navigate(role === 'admin' ? '/admin' : '/dashboard');
-    } catch (error: any) {
-      // Check if server requires 2FA
-      if (error.response?.status === 403 && error.response?.data?.requires_2fa) {
-        resetLockout(email);
-        setRequires2FA(true);
-        setTempToken(error.response.data.temp_token || '');
-        toast.info('Enter your 2FA code to continue');
-      } else if (error.response?.status === 423) {
-        // Server-side lockout
-        setIsLockedOut(true);
-        const serverMsg = error.response?.data?.retry_after_ms;
-        setLockoutRemaining(serverMsg ? formatLockoutTime(serverMsg) : '15 minutes');
-        toast.error('Account locked due to too many failed attempts.');
-      } else {
-        const result = recordFailedAttempt(email);
-        setFailedAttempts(result.attempts);
-        if (result.locked) {
-          setIsLockedOut(true);
-          setLockoutRemaining(formatLockoutTime(result.remainingMs));
-          toast.error(`Too many failed attempts. Account locked for ${formatLockoutTime(result.remainingMs)}.`);
-        } else {
-          const remaining = 5 - result.attempts;
-          const message = error.response?.data?.error || 'Invalid email or password.';
-          toast.error(`${message} ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`);
-        }
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handle2FAVerify = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (totpCode.length !== 6) return;
-    try {
-      setIsLoading(true);
-      const res = await api.post('/api/auth/2fa/verify', {
-        temp_token: tempToken,
-        code: totpCode,
-      });
-      // Complete login with the real token
-      const { token, pharmacy } = res.data;
-      localStorage.setItem('pharmtrack_token', token);
-      localStorage.setItem('pharmtrack_pharmacy', JSON.stringify(pharmacy));
-      // Force a page reload to pick up new auth state
-      window.location.href = '/dashboard';
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Invalid 2FA code. Please try again.');
-      setTotpCode('');
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -272,21 +199,8 @@ const PharmacyLoginPage = () => {
                 <div className="text-right">
                   <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShowForgot(true)}>Forgot password?</button>
                 </div>
-                {isLockedOut && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-                    <Lock className="w-4 h-4 text-destructive shrink-0" />
-                    <p className="text-sm text-destructive">
-                      Account locked. Try again in <strong>{lockoutRemaining}</strong>.
-                    </p>
-                  </div>
-                )}
-                {!isLockedOut && failedAttempts > 0 && failedAttempts < 5 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    {5 - failedAttempts} attempt{5 - failedAttempts !== 1 ? 's' : ''} remaining before lockout
-                  </p>
-                )}
-                <Button type="submit" className="w-full h-11" disabled={isLoading || isLockedOut}>
-                  {isLoading ? 'Signing in...' : isLockedOut ? 'Account Locked' : 'Sign In'}
+                <Button type="submit" className="w-full h-11" disabled={isLoading}>
+                  {isLoading ? 'Signing in...' : 'Sign In'}
                 </Button>
                 <div className="relative my-2">
                   <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>

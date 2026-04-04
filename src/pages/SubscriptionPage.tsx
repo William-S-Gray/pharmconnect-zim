@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Check, X, Star } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import { useState } from 'react';
 
 const plans = [
@@ -37,16 +37,19 @@ const SubscriptionPage = () => {
   const handlePlanAction = async (plan: 'FREE' | 'BASIC' | 'PRO') => {
     if (plan === currentPlan) return;
     try {
+      if (!pharmacy?.id) return;
       setLoadingPlan(plan);
-      const res = await api.post('/api/subscriptions/initiate', { plan });
-      if (res.data.redirectUrl) {
-        window.open(res.data.redirectUrl, '_blank');
-        toast.success('Payment page opened in a new tab');
-      } else {
-        toast.success('Plan updated successfully');
-      }
+      
+      const { error } = await supabase
+        .from('pharmacies')
+        .update({ plan_tier: plan })
+        .eq('id', pharmacy.id);
+        
+      if (error) throw error;
+      
+      toast.success(`Succesfully switched to ${plan} plan`);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Failed to process subscription');
+      toast.error(error.message || 'Failed to process subscription');
     } finally {
       setLoadingPlan(null);
     }

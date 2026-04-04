@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, FileSpreadsheet, AlertCircle, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { mockDrugs } from '@/lib/mockData';
+import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import * as XLSX from 'xlsx';
 
@@ -21,18 +21,18 @@ interface ImportModalProps {
   onConfirm: (rows: ImportRow[]) => void;
 }
 
-function fuzzyMatchDrug(name: string): { matched: boolean; drugId?: string } {
+function fuzzyMatchDrug(name: string, masterDrugs: any[]): { matched: boolean; drugId?: string } {
   const q = name.toLowerCase().trim();
-  const drug = mockDrugs.find(d =>
-    d.common_name.toLowerCase().includes(q) ||
-    d.generic_name.toLowerCase().includes(q) ||
-    d.brand_names.some(b => b.toLowerCase().includes(q)) ||
-    d.search_terms.some(t => t.includes(q))
+  const drug = masterDrugs.find(d =>
+    d.common_name?.toLowerCase().includes(q) ||
+    d.generic_name?.toLowerCase().includes(q) ||
+    (d.brand_names && d.brand_names.some((b: string) => b.toLowerCase().includes(q))) ||
+    (d.search_terms && d.search_terms.some((t: string) => t.includes(q)))
   );
   return drug ? { matched: true, drugId: drug.id } : { matched: false };
 }
 
-function parseFileData(data: string[][]): ImportRow[] {
+function parseFileData(data: string[][], masterDrugs: any[]): ImportRow[] {
   const header = data[0]?.map(h => h?.toString().toLowerCase().trim()) || [];
   const nameIdx = header.findIndex(h => h?.includes('drug') || h?.includes('name') || h?.includes('medicine'));
   const qtyIdx = header.findIndex(h => h?.includes('qty') || h?.includes('quantity') || h?.includes('stock'));
@@ -41,7 +41,7 @@ function parseFileData(data: string[][]): ImportRow[] {
 
   return data.slice(1).filter(row => row[nameIdx >= 0 ? nameIdx : 0]).map(row => {
     const drugName = row[nameIdx >= 0 ? nameIdx : 0]?.toString() || '';
-    const match = fuzzyMatchDrug(drugName);
+    const match = fuzzyMatchDrug(drugName, masterDrugs);
     return {
       drug_name: drugName,
       quantity: Number(row[qtyIdx >= 0 ? qtyIdx : 1]) || 0,
@@ -64,18 +64,23 @@ export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps)
     setFileName(file.name);
 
     try {
+      // Fetch master drugs for fuzzy matching
+      const { data: masterDrugs } = await supabase
+        .from('drugs')
+        .select('id, generic_name, common_name, brand_names, search_terms');
+
       const ext = file.name.split('.').pop()?.toLowerCase();
 
       if (ext === 'csv') {
         const text = await file.text();
         const lines = text.split('\n').map(l => l.split(',').map(c => c.trim().replace(/^"|"$/g, '')));
-        setRows(parseFileData(lines));
+        setRows(parseFileData(lines, masterDrugs || []));
       } else if (ext === 'xlsx' || ext === 'xls') {
         const buffer = await file.arrayBuffer();
         const wb = XLSX.read(buffer, { type: 'array' });
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const data: string[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-        setRows(parseFileData(data));
+        setRows(parseFileData(data, masterDrugs || []));
       }
     } catch {
       setRows([]);

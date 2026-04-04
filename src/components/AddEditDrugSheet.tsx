@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Search, Save, PlusCircle } from 'lucide-react';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription,
 } from '@/components/ui/sheet';
@@ -83,8 +83,14 @@ export function AddEditDrugSheet({ open, onOpenChange, editData, onSave }: AddEd
     }
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await api.get('/api/search/autocomplete', { params: { q: value } });
-        const suggestions: Suggestion[] = res.data.suggestions || [];
+        const { data, error } = await supabase
+          .from('drugs')
+          .select('id, common_name, generic_name, strength, form')
+          .or(`common_name.ilike.%${value}%,generic_name.ilike.%${value}%`)
+          .limit(8);
+        
+        if (error) throw error;
+        const suggestions: Suggestion[] = data || [];
         setDrugResults(suggestions);
         setShowDrugList(suggestions.length > 0);
       } catch {

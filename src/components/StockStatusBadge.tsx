@@ -1,5 +1,5 @@
 import { CheckCircle, AlertTriangle, XCircle } from 'lucide-react';
-import type { StockStatus } from '@/lib/mockData';
+export type StockStatus = 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK';
 
 interface StockStatusBadgeProps {
   status: StockStatus;

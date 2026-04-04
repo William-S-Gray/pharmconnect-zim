@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { StockStatusBadge } from '@/components/StockStatusBadge';
-import { Plus, Search, Upload, Download, FileSpreadsheet, Trash2, Pencil } from 'lucide-react';
-import type { StockStatus } from '@/lib/mockData';
+import { StockStatusBadge, type StockStatus } from '@/components/StockStatusBadge';
+import { useAuth } from '@/context/AuthContext';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { AddEditDrugSheet, type StockFormData } from '@/components/AddEditDrugSheet';
 import { ImportModal } from '@/components/ImportModal';
 import { exportToCSV, exportToExcel } from '@/lib/exportUtils';
@@ -11,9 +11,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
-import { useAuth } from '@/context/AuthContext';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import api from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -21,6 +19,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Plus, Search, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
 
 interface StockItem {
   id: string;
@@ -38,7 +37,7 @@ interface StockItem {
 }
 
 const StockManagementPage = () => {
-  const { pharmacy } = useAuth();
+  const { pharmacy, role, user } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'ALL' | StockStatus>('ALL');
@@ -48,26 +47,60 @@ const StockManagementPage = () => {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data: items = [], isLoading } = useQuery({
     queryKey: ['stock', pharmacy?.id],
-    queryFn: () => api.get('/api/stock').then(r => r.data),
-    enabled: !!pharmacy,
-  });
+    queryFn: async () => {
+      if (!pharmacy?.id) return [];
+      
+      const { data, error } = await supabase
+        .from('pharmacy_stock')
+        .select(`
+          id,
+          drug_id,
+          quantity,
+          unit_price,
+          threshold,
+          expiry_date,
+          is_available,
+          drugs (
+            generic_name,
+            common_name,
+            strength,
+            form
+          )
+        `)
+        .eq('pharmacy_id', pharmacy.id);
+        
+      if (error) throw error;
+      
+      return (data || []).map((s: any) => {
+        const drug = s.drugs;
+        const qty = s.quantity || 0;
+        const thresh = s.threshold || 0;
+        const avail = s.is_available;
+        
+        let stock_status: StockStatus = 'IN_STOCK';
+        if (!avail || qty === 0) stock_status = 'OUT_OF_STOCK';
+        else if (qty <= thresh) stock_status = 'LOW_STOCK';
 
-  const items: StockItem[] = (data?.stock || []).map((s: any) => ({
-    id: s.id,
-    drug_id: s.drug_id,
-    drugName: s.common_name || s.drug_name || '',
-    common_name: s.common_name,
-    strength: s.strength || '',
-    form: s.form || '',
-    quantity: s.quantity,
-    unit_price: s.unit_price,
-    threshold: s.threshold,
-    expiry_date: s.expiry_date || '',
-    is_available: s.is_available,
-    stock_status: s.stock_status || 'IN_STOCK',
-  }));
+        return {
+          id: s.id,
+          drug_id: s.drug_id,
+          drugName: drug?.common_name || drug?.generic_name || 'Unknown Drug',
+          common_name: drug?.common_name,
+          strength: drug?.strength || '',
+          form: drug?.form || '',
+          quantity: qty,
+          unit_price: s.unit_price || 0,
+          threshold: thresh,
+          expiry_date: s.expiry_date || '',
+          is_available: avail,
+          stock_status,
+        };
+      });
+    },
+    enabled: !!pharmacy?.id && isSupabaseConfigured,
+  });
 
   const filtered = items.filter(item => {
     const matchesSearch = item.drugName.toLowerCase().includes(search.toLowerCase()) ||
@@ -76,38 +109,102 @@ const StockManagementPage = () => {
     return matchesSearch && matchesFilter;
   });
 
-  const pagination = usePagination(filtered, { defaultPageSize: 20 });
+  const pagination = usePagination<StockItem>(filtered, { defaultPageSize: 20 });
 
   const addMutation = useMutation({
-    mutationFn: (payload: any) => api.post('/api/stock', payload),
+    mutationFn: async (payload: any) => {
+      if (role === 'pharmacy_staff') {
+        const { error } = await supabase
+          .from('pending_approvals')
+          .insert([{
+            pharmacy_id: pharmacy?.id,
+            requester_id: user?.id,
+            action_type: 'CREATE',
+            table_name: 'pharmacy_stock',
+            payload
+          }]);
+        if (error) throw error;
+        toast.info('Request sent to admin for approval');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('pharmacy_stock')
+        .insert([{ ...payload, pharmacy_id: pharmacy?.id }]);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast.success('Drug added to inventory');
+      if (role !== 'pharmacy_staff') toast.success('Drug added to inventory');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to add drug');
+      toast.error(error.message || 'Failed to add drug');
     },
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ drugId, data }: { drugId: string; data: any }) => api.put(`/api/stock/${drugId}`, data),
+    mutationFn: async ({ drugId, data }: { drugId: string; data: any }) => {
+      if (role === 'pharmacy_staff') {
+        const { error } = await supabase
+          .from('pending_approvals')
+          .insert([{
+            pharmacy_id: pharmacy?.id,
+            requester_id: user?.id,
+            action_type: 'UPDATE',
+            table_name: 'pharmacy_stock',
+            target_id: drugId,
+            payload: data
+          }]);
+        if (error) throw error;
+        toast.info('Update request sent to admin');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('pharmacy_stock')
+        .update(data)
+        .eq('id', drugId);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast.success('Drug updated');
+      if (role !== 'pharmacy_staff') toast.success('Drug updated');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to update drug');
+      toast.error(error.message || 'Failed to update drug');
     },
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (drugId: string) => api.delete(`/api/stock/${drugId}`),
+    mutationFn: async (drugId: string) => {
+      if (role === 'pharmacy_staff') {
+        const { error } = await supabase
+          .from('pending_approvals')
+          .insert([{
+            pharmacy_id: pharmacy?.id,
+            requester_id: user?.id,
+            action_type: 'DELETE',
+            table_name: 'pharmacy_stock',
+            target_id: drugId,
+            payload: {}
+          }]);
+        if (error) throw error;
+        toast.info('Delete request sent to admin');
+        return;
+      }
+
+      const { error } = await supabase
+        .from('pharmacy_stock')
+        .delete()
+        .eq('id', drugId);
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast.success('Drug removed from inventory');
+      if (role !== 'pharmacy_staff') toast.success('Drug removed from inventory');
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.error || 'Failed to remove drug');
+      toast.error(error.message || 'Failed to remove drug');
     },
   });
 
@@ -145,11 +242,26 @@ const StockManagementPage = () => {
 
   const handleImport = async (rows: any[]) => {
     try {
-      const res = await api.post('/api/stock/bulk-import', { items: rows });
+      const formatted = rows.map(r => ({
+        pharmacy_id: pharmacy?.id,
+        drug_id: r.drug_id,
+        quantity: r.quantity,
+        unit_price: r.unit_price,
+        threshold: r.threshold || 10,
+        expiry_date: r.expiry_date || null,
+        is_available: true
+      }));
+
+      const { data, error } = await supabase
+        .from('pharmacy_stock')
+        .upsert(formatted, { onConflict: 'pharmacy_id,drug_id' });
+
+      if (error) throw error;
+      
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast.success(`${res.data.imported || rows.length} drug(s) imported`);
+      toast.success(`${rows.length} drug(s) processed`);
     } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Import failed');
+      toast.error(error.message || 'Import failed');
     }
   };
 

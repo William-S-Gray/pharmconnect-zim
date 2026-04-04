@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSearchStore } from '@/stores/searchStore';
-import api from '@/lib/api';
+import { supabase } from '@/lib/supabaseClient';
 
 interface Suggestion {
   id: string;
@@ -52,8 +52,14 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
     }
     debounceRef.current = setTimeout(async () => {
       try {
-        const res = await api.get('/api/search/autocomplete', { params: { q: value } });
-        const suggestions: Suggestion[] = res.data.suggestions || [];
+        const { data, error } = await supabase
+          .from('drugs')
+          .select('id, common_name, generic_name, strength, form, category')
+          .or(`common_name.ilike.%${value}%,generic_name.ilike.%${value}%`)
+          .limit(6);
+        
+        if (error) throw error;
+        const suggestions: Suggestion[] = data || [];
         setResults(suggestions);
         setIsOpen(suggestions.length > 0);
       } catch {
