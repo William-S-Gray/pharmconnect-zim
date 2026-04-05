@@ -14,7 +14,7 @@ const AdminProfilePage = () => {
   const { pharmacy } = useAuth();
 
   const [profile, setProfile] = useState({
-    name: pharmacy?.name || 'PharmTrack Admin',
+    name: pharmacy?.name || 'PharmConnect Zim Admin',
     email: pharmacy?.email || 'admin@pharmtrack.co.zw',
     phone: pharmacy?.phone || '',
   });

@@ -77,7 +77,7 @@ const ResetPasswordPage = () => {
 
           {isSuccess ? (
             <div className="space-y-4">
-              <Link to="/pharmacy/login">
+              <Link to="/login">
                 <Button className="w-full h-11">Sign In with New Password</Button>
               </Link>
             </div>
@@ -86,7 +86,7 @@ const ResetPasswordPage = () => {
               <p className="text-sm text-muted-foreground">
                 This reset link is invalid or has expired. Please request a new one.
               </p>
-              <Link to="/pharmacy/login">
+              <Link to="/login">
                 <Button variant="outline" className="w-full h-11 gap-2">
                   <ArrowLeft className="w-4 h-4" /> Back to Login
                 </Button>
@@ -131,7 +131,7 @@ const ResetPasswordPage = () => {
               <Button type="submit" className="w-full h-11" disabled={isLoading}>
                 {isLoading ? 'Resetting...' : 'Reset Password'}
               </Button>
-              <Link to="/pharmacy/login" className="block">
+              <Link to="/login" className="block">
                 <Button type="button" variant="ghost" className="w-full text-sm gap-1">
                   <ArrowLeft className="w-4 h-4" /> Back to Login
                 </Button>

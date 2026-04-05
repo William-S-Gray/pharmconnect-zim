@@ -79,7 +79,7 @@ const PharmacyRegisterPage = () => {
 
       if (data.user) {
         toast.success('Registration successful! Please check your email for a confirmation link.');
-        navigate('/pharmacy/login');
+        navigate('/login');
       }
     } catch (error: any) {
       toast.error(error.message || 'Registration failed. Please try again later.');
@@ -103,7 +103,7 @@ const PharmacyRegisterPage = () => {
             </div>
             <div>
               <h1 className="font-heading font-bold text-xl text-foreground text-emboss">Register Your Pharmacy</h1>
-              <p className="text-sm text-muted-foreground">Join PharmTrack — it's free to list</p>
+              <p className="text-sm text-muted-foreground">Join PharmConnect Zim — it's free to list</p>
             </div>
           </div>
 
@@ -181,7 +181,7 @@ const PharmacyRegisterPage = () => {
           </form>
 
           <p className="text-sm text-center text-muted-foreground mt-4">
-            Already registered? <Link to="/pharmacy/login" className="text-primary hover:underline">Sign in</Link>
+            Already registered? <Link to="/login" className="text-primary hover:underline">Sign in</Link>
           </p>
         </div>
       <Dialog open={showDuplicateModal} onOpenChange={setShowDuplicateModal}>
@@ -200,14 +200,14 @@ const PharmacyRegisterPage = () => {
               type="button" 
               variant="outline" 
               className="flex-1 h-11"
-              onClick={() => navigate(`/pharmacy/login?email=${encodeURIComponent(form.email)}`)}
+              onClick={() => navigate(`/login?email=${encodeURIComponent(form.email)}`)}
             >
               Sign In
             </Button>
             <Button 
               type="button" 
               className="flex-1 h-11"
-              onClick={() => navigate(`/pharmacy/login?mode=forgot&email=${encodeURIComponent(form.email)}`)}
+              onClick={() => navigate(`/login?mode=forgot&email=${encodeURIComponent(form.email)}`)}
             >
               Reset Password
             </Button>

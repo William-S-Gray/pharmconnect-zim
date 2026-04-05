@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, LogOut, Settings, ScrollText } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -9,7 +9,8 @@ const adminNavItems = [
   { label: 'Approvals', icon: CheckSquare, path: '/admin/approvals' },
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
-  { label: 'Users', icon: Users, path: '/admin/users' },
+  { label: 'Pharmacies', icon: Store, path: '/admin/pharmacies' },
+  { label: 'Staff', icon: UserCog, path: '/admin/staff' },
   { label: 'Audit Log', icon: ScrollText, path: '/admin/audit-log' },
   { label: 'Settings', icon: Settings, path: '/admin/profile' },
 ];
@@ -33,7 +34,7 @@ export function AdminLayout() {
               <Pill className="w-4 h-4 text-white" />
             </div>
             <div>
-              <span className="font-heading font-bold text-foreground text-emboss block text-sm">PharmTrack</span>
+              <span className="font-heading font-bold text-foreground text-emboss block text-sm">PharmConnect Zim</span>
               <span className="text-[10px] text-destructive font-semibold uppercase tracking-wider">Admin</span>
             </div>
           </Link>

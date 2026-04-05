@@ -178,7 +178,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (showMessage) {
       toast.info('You have been logged out.');
       setTimeout(() => {
-        window.location.href = '/pharmacy/login';
+        window.location.href = '/login';
       }, 1500);
     }
   }, []);

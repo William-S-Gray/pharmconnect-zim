@@ -14,7 +14,7 @@ import { AdminLayout } from "./components/AdminLayout";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const PharmacyRegisterPage = lazy(() => import("./pages/PharmacyRegisterPage"));
-const PharmacyLoginPage = lazy(() => import("./pages/PharmacyLoginPage"));
+const LoginPage = lazy(() => import("./pages/LoginPage"));
 const PharmacyDashboard = lazy(() => import("./pages/PharmacyDashboard"));
 const StockManagementPage = lazy(() => import("./pages/StockManagementPage"));
 const SubscriptionPage = lazy(() => import("./pages/SubscriptionPage"));
@@ -24,13 +24,15 @@ const SecurityAuditPage = lazy(() => import("./pages/SecurityAuditPage"));
 const ResetPasswordPage = lazy(() => import("./pages/ResetPasswordPage"));
 const PharmacyRequestsPage = lazy(() => import("./pages/PharmacyRequestsPage"));
 const PharmacyApprovalsPage = lazy(() => import("./pages/PharmacyApprovalsPage"));
+const PharmacyStaffPage = lazy(() => import("./pages/PharmacyStaffPage"));
 
 // Admin pages
 const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
 const AdminApprovalsPage = lazy(() => import("./pages/admin/AdminApprovalsPage"));
 const AdminAnalyticsPage = lazy(() => import("./pages/admin/AdminAnalyticsPage"));
 const AdminDrugsPage = lazy(() => import("./pages/admin/AdminDrugsPage"));
-const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
+const AdminPharmaciesPage = lazy(() => import("./pages/admin/AdminPharmaciesPage"));
+const AdminStaffPage = lazy(() => import("./pages/admin/AdminStaffPage"));
 const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
 const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 
@@ -64,7 +66,7 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
-            <Route path="/pharmacy/login" element={<PharmacyLoginPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/pharmacy/reset-password" element={<ResetPasswordPage />} />
             <Route path="/dashboard" element={
               <ProtectedRoute>
@@ -75,6 +77,7 @@ const App = () => (
               <Route path="stock" element={<StockManagementPage />} />
               <Route path="requests" element={<PharmacyRequestsPage />} />
               <Route path="approvals" element={<PharmacyApprovalsPage />} />
+              <Route path="staff" element={<PharmacyStaffPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="alerts" element={<AlertSettingsPage />} />
               <Route path="profile" element={<PharmacyProfilePage />} />
@@ -89,7 +92,8 @@ const App = () => (
               <Route path="approvals" element={<AdminApprovalsPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="drugs" element={<AdminDrugsPage />} />
-              <Route path="users" element={<AdminUsersPage />} />
+              <Route path="pharmacies" element={<AdminPharmaciesPage />} />
+              <Route path="staff" element={<AdminStaffPage />} />
               <Route path="audit-log" element={<AdminAuditLogPage />} />
               <Route path="profile" element={<AdminProfilePage />} />
             </Route>

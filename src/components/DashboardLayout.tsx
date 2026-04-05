@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -10,6 +10,7 @@ const navItems = [
   { label: 'Requested Drugs', icon: MessageCircle, path: '/dashboard/requests' },
   { label: 'Inventory', icon: Package, path: '/dashboard/stock' },
   { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
+  { label: 'Staff Management', icon: Users, path: '/dashboard/staff', adminOnly: true },
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
@@ -35,7 +36,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
             <div className="w-8 h-8 rounded-lg flex items-center justify-center brand-icon-skeu">
               <Pill className="w-4 h-4 text-white" />
             </div>
-            <span className="font-heading font-bold text-foreground text-emboss">PharmTrack</span>
+            <span className="font-heading font-bold text-foreground text-emboss">PharmConnect Zim</span>
           </Link>
         </div>
 

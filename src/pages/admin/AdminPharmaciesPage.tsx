@@ -54,7 +54,7 @@ const emptyForm: UserFormData = {
 
 const cities = ['Harare', 'Bulawayo', 'Mutare', 'Gweru'];
 
-const AdminUsersPage = () => {
+const AdminPharmaciesPage = () => {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -286,12 +286,12 @@ const AdminUsersPage = () => {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">User Management</h1>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Pharmacy Management</h1>
           <p className="text-muted-foreground text-sm">{users.length} registered pharmacies</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={openCreate}>
-            <UserPlus className="w-4 h-4 mr-1.5" /> Add User
+            <UserPlus className="w-4 h-4 mr-1.5" /> Add Pharmacy
           </Button>
           <ExportDropdown
             disabled={!filtered.length}
@@ -514,4 +514,4 @@ const AdminUsersPage = () => {
   );
 };
 
-export default AdminUsersPage;
+export default AdminPharmaciesPage;

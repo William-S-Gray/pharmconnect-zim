@@ -9,7 +9,7 @@ const plans = [
   {
     name: 'FREE' as const,
     price: 0,
-    features: ['Listed on PharmTrack', 'Searchable by patients', '100 drugs max'],
+    features: ['Listed on PharmConnect Zim', 'Searchable by patients', '100 drugs max'],
     missing: ['SMS Alerts', 'Analytics', 'API Access'],
     popular: false,
   },

@@ -10,7 +10,7 @@ import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { MathCaptcha } from '@/components/MathCaptcha';
 
-const PharmacyLoginPage = () => {
+const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { login, pharmacy, isSuperAdmin, user } = useAuth();
@@ -122,14 +122,14 @@ const PharmacyLoginPage = () => {
             )}
           </div>
           <h1 className="font-heading font-bold text-xl text-foreground text-emboss">
-            {requires2FA ? 'Two-Factor Verification' : showForgot ? 'Reset Password' : 'Pharmacy Login'}
+            {requires2FA ? 'Two-Factor Verification' : showForgot ? 'Reset Password' : 'Login'}
           </h1>
           <p className="text-sm text-muted-foreground">
             {requires2FA
               ? 'Enter the 6-digit code from your authenticator app'
               : showForgot
               ? forgotSent ? 'Check your inbox for the reset link' : "Enter your email and we'll send a reset link"
-              : 'Sign in to manage your pharmacy'}
+              : 'Sign in to your account'}
           </p>
           </div>
 
@@ -266,4 +266,4 @@ const PharmacyLoginPage = () => {
   );
 };
 
-export default PharmacyLoginPage;
+export default LoginPage;

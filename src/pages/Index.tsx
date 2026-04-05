@@ -99,9 +99,9 @@ const Index = () => {
             <div className="w-6 h-6 rounded flex items-center justify-center brand-icon-skeu">
               <Pill className="w-3 h-3 text-white" />
             </div>
-            <span className="font-heading font-semibold text-foreground text-emboss">PharmTrack</span>
+            <span className="font-heading font-semibold text-foreground text-emboss">PharmConnect Zim</span>
           </div>
-          <p>© 2026 PharmTrack. Helping Zimbabwe find medicine faster.</p>
+          <p>© 2026 PharmConnect Zim. Helping Zimbabwe find medicine faster.</p>
         </div>
       </footer>
     </div>

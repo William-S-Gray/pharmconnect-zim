@@ -5,6 +5,6 @@ import { FullPageSpinner } from './LoadingSpinner';
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { pharmacy, isLoading } = useAuth();
   if (isLoading) return <FullPageSpinner />;
-  if (!pharmacy) return <Navigate to="/pharmacy/login" replace />;
+  if (!pharmacy) return <Navigate to="/login" replace />;
   return <>{children}</>;
 };

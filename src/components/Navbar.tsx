@@ -20,7 +20,7 @@ export function Navbar() {
           >
             <Pill className="w-4 h-4 text-white" />
           </div>
-          <span className="font-heading font-bold text-lg text-foreground text-emboss">PharmTrack</span>
+          <span className="font-heading font-bold text-lg text-foreground text-emboss">PharmConnect Zim</span>
         </Link>
 
         {/* Desktop */}
@@ -30,7 +30,7 @@ export function Navbar() {
             <Link to="/pharmacy/register">List Your Pharmacy</Link>
           </Button>
           <Button asChild>
-            <Link to="/pharmacy/login">Login</Link>
+            <Link to="/login">Login</Link>
           </Button>
         </div>
 
@@ -49,7 +49,7 @@ export function Navbar() {
             <Link to="/pharmacy/register" onClick={() => setMobileOpen(false)}>List Your Pharmacy</Link>
           </Button>
           <Button asChild className="w-full">
-            <Link to="/pharmacy/login" onClick={() => setMobileOpen(false)}>Login</Link>
+            <Link to="/login" onClick={() => setMobileOpen(false)}>Login</Link>
           </Button>
         </div>
       )}
