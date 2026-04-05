@@ -2,6 +2,34 @@ import { createClient } from '@supabase/supabase-js';
 import { supabase } from './supabaseClient';
 import { UserRole } from '@/context/AuthContext';
 
+/**
+ * Creates a completely isolated Supabase client for background operations
+ * (user provisioning) that will NOT interfere with the main user session.
+ *
+ * Key settings:
+ * - persistSession: false  — no localStorage writes
+ * - autoRefreshToken: false — won't compete for token refresh
+ * - lock: no-op           — CRITICAL: bypasses Navigator Locks API entirely,
+ *                           preventing the "lock stolen" error on the main client
+ */
+const createEphemeralClient = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!url || !key) throw new Error('Supabase credentials missing.');
+
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      storageKey: `pharmconnect-bg-${Math.random().toString(36).slice(2)}`,
+      // Bypass Navigator Locks entirely — this ephemeral client has no
+      // long-lived session to protect, so no locking is needed.
+      lock: async (_name: string, _timeout: number, fn: () => Promise<any>) => fn(),
+    },
+  });
+};
+
 export const createStaffUser = async (
   email: string,
   password: string,
@@ -9,43 +37,25 @@ export const createStaffUser = async (
   role: UserRole,
   pharmacyId: string
 ) => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  const bgClient = createEphemeralClient();
 
-  if (!url || !key) {
-    throw new Error('Supabase credentials missing.');
-  }
-
-  // Create an ephemeral background client so it doesn't log the admin out
-  const bgClient = createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-
-  // Ensure robust error capturing
   const { data: signUpData, error: signUpError } = await bgClient.auth.signUp({
     email,
     password,
     options: {
-      data: {
-        name: fullName,
-      },
+      data: { name: fullName },
     },
   });
 
-  if (signUpError) {
-    throw signUpError;
-  }
+  if (signUpError) throw signUpError;
 
   if (!signUpData.user?.id) {
-    throw new Error('Failed to create an auth record (no user ID returned).');
+    throw new Error('Failed to create auth record — no user ID returned.');
   }
 
   const newUserId = signUpData.user.id;
 
-  // Insert membership for the created user
+  // Insert membership linking the new user to the pharmacy
   const { error: membershipError } = await supabase.from('memberships').insert({
     user_id: newUserId,
     pharmacy_id: pharmacyId,
@@ -53,16 +63,27 @@ export const createStaffUser = async (
   });
 
   if (membershipError) {
-    throw new Error('User was created, but failed to assign pharmacy: ' + membershipError.message);
+    throw new Error('User was created but pharmacy assignment failed: ' + membershipError.message);
   }
 
-  // Wait a moment for trigger to insert profile before updating, then ensure global role matches
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  await supabase.from('profiles').update({
-    global_role: role,
-    full_name: fullName,
-  }).eq('id', newUserId);
+  // Wait briefly for the DB trigger to insert the profile row, then patch it
+  await new Promise(resolve => setTimeout(resolve, 600));
+
+  await supabase
+    .from('profiles')
+    .update({ global_role: role, full_name: fullName })
+    .eq('id', newUserId);
 
   return newUserId;
+};
+
+/**
+ * Sends a Supabase password reset email to the given address.
+ * The user clicks the link and lands on /reset-password to set a new password.
+ */
+export const sendPasswordResetEmail = async (email: string): Promise<void> => {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) throw error;
 };

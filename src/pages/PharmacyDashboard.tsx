@@ -9,7 +9,7 @@ import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const PharmacyDashboard = () => {
-  const { pharmacy } = useAuth();
+  const { pharmacy, profile, role } = useAuth();
   const [greeting, setGreeting] = useState(getCATGreeting());
   const [catTime, setCatTime] = useState(formatCATTime());
 
@@ -20,6 +20,12 @@ const PharmacyDashboard = () => {
     }, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  const getRoleDisplay = () => {
+    if (role === 'super_admin') return 'Super Admin';
+    if (role === 'pharmacy_admin') return 'Pharmacy Admin';
+    return 'Staff Member';
+  };
 
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats', pharmacy?.id],
@@ -106,12 +112,12 @@ const PharmacyDashboard = () => {
 
       <div>
         <h1 className="font-heading font-bold text-2xl text-foreground">
-          {greeting}, {pharmacy?.name || 'Pharmacy'} 👋
+          {greeting}, {profile?.full_name || 'User'} 👋
         </h1>
         <div className="flex items-center gap-2 mt-1">
           <Clock className="w-3.5 h-3.5 text-muted-foreground" />
           <p className="text-muted-foreground text-sm">
-            {catTime} CAT · Here's your overview for today
+            {catTime} CAT · You are logged into <span className="font-semibold text-foreground">{pharmacy?.name || 'your pharmacy'}</span> as <span className="font-semibold text-foreground">{getRoleDisplay()}</span>
           </p>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Search, UserCog, Trash2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,7 +13,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
-import { createStaffUser } from '@/lib/adminAuthUtils';
+import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
 import { useAuth, UserRole } from '@/context/AuthContext';
 
 type StaffMember = {
@@ -51,25 +52,36 @@ const PharmacyStaffPage = () => {
     queryFn: async () => {
       if (!pharmacy?.id) return [];
       
-      const { data, error } = await supabase
+      // Step 1: fetch memberships for this pharmacy
+      const { data: memberships, error: mError } = await supabase
         .from('memberships')
-        .select(`
-          role,
-          created_at,
-          profiles:user_id ( id, email, full_name, global_role )
-        `)
+        .select('role, user_id, created_at')
         .eq('pharmacy_id', pharmacy.id);
       
-      if (error) throw error;
-      
-      return (data || []).map((m: any) => ({
-        id: m.profiles.id,
-        email: m.profiles.email,
-        full_name: m.profiles.full_name,
-        global_role: m.profiles.global_role,
-        membership_role: m.role,
-        joined: m.created_at,
-      }));
+      if (mError) throw mError;
+      if (!memberships?.length) return [];
+
+      // Step 2: batch-fetch the profiles
+      const userIds = memberships.map(m => m.user_id);
+      const { data: profilesData, error: pError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, global_role')
+        .in('id', userIds);
+      if (pError) throw pError;
+
+      const profileMap = Object.fromEntries((profilesData || []).map(p => [p.id, p]));
+
+      return memberships.map(m => {
+        const prof = profileMap[m.user_id] || {};
+        return {
+          id: prof.id || m.user_id,
+          email: prof.email || '',
+          full_name: prof.full_name || '',
+          global_role: prof.global_role as UserRole,
+          membership_role: m.role as UserRole,
+          joined: m.created_at,
+        };
+      });
     },
     enabled: !!pharmacy?.id,
   });
@@ -101,6 +113,14 @@ const PharmacyStaffPage = () => {
       setDeleteUser(null);
     },
     onError: (error: any) => toast.error(error.message || 'Failed to revoke access'),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (email: string) => {
+      await sendPasswordResetEmail(email);
+    },
+    onSuccess: (_, email) => toast.success(`Password reset email sent to ${email}`),
+    onError: (error: any) => toast.error(error.message || 'Failed to send reset email'),
   });
 
   const filtered = staffList.filter(u =>
@@ -156,7 +176,14 @@ const PharmacyStaffPage = () => {
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0 flex-wrap">
-                    {u.membership_role !== 'pharmacy_admin' && ( // Prevent admins from deleting themselves
+                    <Button
+                      size="sm" variant="outline"
+                      disabled={resetPasswordMutation.isPending}
+                      onClick={() => u.email && resetPasswordMutation.mutate(u.email)}
+                    >
+                      Reset Password
+                    </Button>
+                    {u.membership_role !== 'pharmacy_admin' && (
                       <Button size="sm" variant="ghost" onClick={() => setDeleteUser(u)} title="Revoke Access" className="text-destructive hover:text-destructive hover:bg-destructive/10">
                         <Trash2 className="w-4 h-4 mr-1.5" /> Remove
                       </Button>

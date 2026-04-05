@@ -16,6 +16,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { createStaffUser } from '@/lib/adminAuthUtils';
 
 interface PharmacyUser {
   id: string;
@@ -24,6 +25,7 @@ interface PharmacyUser {
   phone: string;
   city: string;
   suburb: string;
+  address?: string;
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
   drug_count: number;
@@ -39,6 +41,8 @@ type UserFormData = {
   status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
   password?: string;
+  admin_name?: string;
+  address?: string;
 };
 
 const emptyForm: UserFormData = {
@@ -50,6 +54,8 @@ const emptyForm: UserFormData = {
   status: 'PENDING',
   plan_tier: 'FREE',
   password: '',
+  admin_name: '',
+  address: '',
 };
 
 const cities = ['Harare', 'Bulawayo', 'Mutare', 'Gweru'];
@@ -133,17 +139,38 @@ const AdminPharmaciesPage = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: UserFormData) => {
-      // In a real production app, you'd use a Supabase Edge Function to create users via Admin API
-      // For now, we advise using the registration page to ensure auth.users is populated
-      throw new Error('Admin user creation must be done via the Pharmacy Registration page for security.');
+      if (!data.password || !data.admin_name) {
+         throw new Error("Admin Name and Password are required to create a new Pharmacy and Administrator.");
+      }
+
+      // Create Pharmacy
+      const { data: newPharmacy, error: pharmacyError } = await supabase
+        .from('pharmacies')
+        .insert({
+           name: data.name,
+           email: data.email,
+           phone: data.phone,
+           city: data.city,
+           suburb: data.suburb,
+           address: data.address,
+           status: data.status,
+           plan_tier: data.plan_tier
+        })
+        .select('id')
+        .single();
+        
+      if (pharmacyError) throw pharmacyError;
+
+      // Create Staff Admin User mapped to this pharmacy
+      await createStaffUser(data.email, data.password, data.admin_name, 'pharmacy_admin', newPharmacy.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success('User created successfully');
+      toast.success('Pharmacy and Admin User created successfully');
       setShowCreate(false);
       setFormData(emptyForm);
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to create user'),
+    onError: (error: any) => toast.error(error.message || 'Failed to create pharmacy'),
   });
 
   const updateMutation = useMutation({
@@ -156,6 +183,7 @@ const AdminPharmaciesPage = () => {
           phone: data.phone,
           city: data.city,
           suburb: data.suburb,
+          address: data.address,
           status: data.status,
           plan_tier: data.plan_tier
         })
@@ -208,7 +236,7 @@ const AdminPharmaciesPage = () => {
 
   const openEdit = (u: PharmacyUser) => {
     setEditUser(u);
-    setFormData({ name: u.name, email: u.email, phone: u.phone, city: u.city, suburb: u.suburb, status: u.status, plan_tier: u.plan_tier });
+    setFormData({ ...emptyForm, name: u.name, email: u.email, phone: u.phone, city: u.city, suburb: u.suburb, status: u.status, plan_tier: u.plan_tier });
   };
 
   const openCreate = () => {
@@ -230,24 +258,22 @@ const AdminPharmaciesPage = () => {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Phone</Label>
-          <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0771 234 567" />
+          <Label>City / Town</Label>
+          <Input list="city-list" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} placeholder="e.g. Harare" />
+          <datalist id="city-list">
+            {cities.map(c => <option key={c} value={c} />)}
+          </datalist>
         </div>
-        <div className="space-y-2">
-          <Label>City</Label>
-          <Select value={formData.city} onValueChange={(v) => setFormData({ ...formData, city: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {cities.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Suburb</Label>
           <Input value={formData.suburb} onChange={(e) => setFormData({ ...formData, suburb: e.target.value })} placeholder="e.g. Avondale" />
         </div>
+      </div>
+      <div className="space-y-2">
+        <Label>Street Address</Label>
+        <Input value={formData.address || ''} onChange={(e) => setFormData({ ...formData, address: e.target.value })} placeholder="123 Samora Machel Ave" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Status</Label>
           <Select value={formData.status} onValueChange={(v) => setFormData({ ...formData, status: v as UserFormData['status'] })}>
@@ -259,8 +285,6 @@ const AdminPharmaciesPage = () => {
             </SelectContent>
           </Select>
         </div>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label>Plan Tier</Label>
           <Select value={formData.plan_tier} onValueChange={(v) => setFormData({ ...formData, plan_tier: v as UserFormData['plan_tier'] })}>
@@ -272,13 +296,29 @@ const AdminPharmaciesPage = () => {
             </SelectContent>
           </Select>
         </div>
-        {isCreate && (
-          <div className="space-y-2">
-            <Label>Password</Label>
-            <Input type="password" value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder="Min 8 characters" />
-          </div>
-        )}
       </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Phone</Label>
+          <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0771 234 567" />
+        </div>
+      </div>
+      {isCreate && (
+        <div className="border-t border-border pt-4 mt-2">
+          <h4 className="font-medium text-sm mb-3">Admin Account Details</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Admin Name</Label>
+              <Input value={formData.admin_name || ''} onChange={(e) => setFormData({ ...formData, admin_name: e.target.value })} placeholder="John Doe" />
+            </div>
+            <div className="space-y-2">
+              <Label>Admin Password</Label>
+              <Input type="password" value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder="Min 6 characters" />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">This will create the primary administrative login for this pharmacy using the email provided above.</p>
+        </div>
+      )}
     </div>
   );
 

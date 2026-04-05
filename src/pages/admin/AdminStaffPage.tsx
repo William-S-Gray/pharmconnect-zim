@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Search, UserCog, Pencil, Trash2, Shield, Store } from 'lucide-react';
 import { toast } from 'sonner';
@@ -13,7 +14,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
-import { createStaffUser } from '@/lib/adminAuthUtils';
+import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
 import { UserRole } from '@/context/AuthContext';
 
 type StaffMember = {
@@ -62,29 +63,50 @@ const AdminStaffPage = () => {
   const { data: staffList = [], isLoading } = useQuery<StaffMember[]>({
     queryKey: ['admin', 'staff'],
     queryFn: async () => {
-      // Get all memberships joined with profiles and pharmacies
-      const { data, error } = await supabase
+      // Step 1: Fetch all memberships with user_id and pharmacy_id
+      const { data: memberships, error: mError } = await supabase
         .from('memberships')
-        .select(`
-          role,
-          pharmacy_id,
-          created_at,
-          profiles:user_id ( id, email, full_name, global_role ),
-          pharmacies ( name )
-        `);
+        .select('role, user_id, pharmacy_id, created_at');
       
-      if (error) throw error;
-      
-      return (data || []).map((m: any) => ({
-        id: m.profiles.id,
-        email: m.profiles.email,
-        full_name: m.profiles.full_name,
-        global_role: m.profiles.global_role,
-        membership_role: m.role,
-        pharmacy_id: m.pharmacy_id,
-        pharmacy_name: m.pharmacies?.name || 'Unknown',
-        joined: m.created_at,
-      }));
+      if (mError) throw mError;
+      if (!memberships?.length) return [];
+
+      // Step 2: Collect unique user_ids and pharmacy_ids
+      const userIds = [...new Set(memberships.map(m => m.user_id))];
+      const pharmIds = [...new Set(memberships.map(m => m.pharmacy_id))];
+
+      // Step 3: Batch-fetch profiles
+      const { data: profilesData, error: pError } = await supabase
+        .from('profiles')
+        .select('id, email, full_name, global_role')
+        .in('id', userIds);
+      if (pError) throw pError;
+
+      // Step 4: Batch-fetch pharmacies
+      const { data: pharmaciesData, error: phError } = await supabase
+        .from('pharmacies')
+        .select('id, name')
+        .in('id', pharmIds);
+      if (phError) throw phError;
+
+      // Step 5: Build lookup maps and merge
+      const profileMap = Object.fromEntries((profilesData || []).map(p => [p.id, p]));
+      const pharmMap = Object.fromEntries((pharmaciesData || []).map(p => [p.id, p]));
+
+      return memberships.map(m => {
+        const prof = profileMap[m.user_id] || {};
+        const pharm = pharmMap[m.pharmacy_id] || {};
+        return {
+          id: prof.id || m.user_id,
+          email: prof.email || '',
+          full_name: prof.full_name || '',
+          global_role: prof.global_role as UserRole,
+          membership_role: m.role as UserRole,
+          pharmacy_id: m.pharmacy_id,
+          pharmacy_name: pharm.name || 'Unknown',
+          joined: m.created_at,
+        };
+      });
     },
   });
 
@@ -117,6 +139,14 @@ const AdminStaffPage = () => {
       setDeleteUser(null);
     },
     onError: (error: any) => toast.error(error.message || 'Failed to revoke access'),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: async (email: string) => {
+      await sendPasswordResetEmail(email);
+    },
+    onSuccess: (_, email) => toast.success(`Password reset email sent to ${email}`),
+    onError: (error: any) => toast.error(error.message || 'Failed to send reset email'),
   });
 
   const filtered = staffList.filter(u =>
@@ -179,6 +209,14 @@ const AdminStaffPage = () => {
                     </div>
                   </div>
                   <div className="flex gap-1.5 shrink-0 flex-wrap">
+                    <Button
+                      size="sm" variant="outline"
+                      disabled={resetPasswordMutation.isPending}
+                      onClick={() => u.email && resetPasswordMutation.mutate(u.email)}
+                      title="Send Password Reset Email"
+                    >
+                      Send Reset
+                    </Button>
                     <Button size="sm" variant="ghost" onClick={() => setDeleteUser(u)} title="Revoke Access" className="text-destructive hover:text-destructive">
                       <Trash2 className="w-3.5 h-3.5" /> Revoke
                     </Button>

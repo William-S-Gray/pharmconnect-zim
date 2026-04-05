@@ -74,19 +74,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const fetchFullProfile = useCallback(async (userId: string, forceRefresh = false) => {
     if (!isSupabaseConfigured) return;
 
-    // Check cache first if not forcing refresh
     if (!forceRefresh) {
       const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          // If we already have the profile for this user, skip the network request
-          if (parsed.profile?.id === userId && parsed.role) {
-             return; // State was already set in initial useEffect
-          }
-        } catch (e) {
-          // ignore
-        }
+          if (parsed.profile?.id === userId && parsed.role) return;
+        } catch (e) { /* ignore */ }
       }
     }
 
@@ -94,46 +88,62 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return fetchPromise.current;
     }
 
-    let resolveFetch: () => void;
-    fetchPromise.current = new Promise<void>((resolve) => {
-      resolveFetch = resolve;
-    });
-    
+    let resolveFetch: (() => void) | undefined;
+    fetchPromise.current = new Promise<void>((resolve) => { resolveFetch = resolve; });
+
     try {
-      // 1. Try high-performance RPC first
-      const { data, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
-      
       let profileData: UserProfile | null = null;
       let finalRole: UserRole | null = null;
       let finalPharmacy: Pharmacy | null = null;
 
-      if (!rpcError && data) {
-        profileData = data.profile;
-        if (data.membership) {
-          finalPharmacy = data.membership.pharmacy;
-          finalRole = data.membership.role;
+      // 1. Try RPC first (fast path)
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
+
+      if (!rpcError && rpcData) {
+        profileData = rpcData.profile;
+        if (rpcData.membership) {
+          finalPharmacy = rpcData.membership.pharmacy;
+          finalRole = rpcData.membership.role;
         } else if (profileData) {
           finalRole = profileData.global_role;
         }
       } else {
-        // 2. FALLBACK: Sequential fetch if RPC fails or is missing
-        console.warn('RPC failed, falling back to sequential fetch:', rpcError);
-        
-        const { data: pData, error: pError } = await supabase
+        // 2. FALLBACK: sequential fetch (RPC not deployed yet)
+        console.warn('RPC unavailable, sequential fallback:', rpcError?.message);
+
+        const { data: pData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', userId)
-          .single();
-        
-        if (pError) throw pError;
-        profileData = pData as UserProfile;
+          .maybeSingle();
 
+        if (pData) {
+          profileData = pData as UserProfile;
+        } else {
+          // Profile row missing — auto-create from session metadata
+          const { data: { user: authUser } } = await supabase.auth.getUser();
+          if (authUser) {
+            const { data: upserted } = await supabase
+              .from('profiles')
+              .upsert({
+                id: userId,
+                email: authUser.email ?? '',
+                full_name: authUser.user_metadata?.name ?? authUser.user_metadata?.full_name ?? '',
+                global_role: 'pharmacy_staff',
+              }, { onConflict: 'id' })
+              .select()
+              .maybeSingle();
+            if (upserted) profileData = upserted as UserProfile;
+          }
+        }
+
+        // Fetch membership — super_admin may have none, that is valid
         const { data: mData } = await supabase
           .from('memberships')
           .select('role, pharmacy_id, pharmacies (*)')
           .eq('user_id', userId)
           .maybeSingle();
-        
+
         if (mData) {
           finalPharmacy = mData.pharmacies as unknown as Pharmacy;
           finalRole = mData.role as UserRole;
@@ -142,12 +152,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         }
       }
 
-      // Update state
+      if (!finalRole) {
+        console.warn('No role determined for user', userId);
+        fetchPromise.current = null;
+        resolveFetch?.();
+        return;
+      }
+
       if (profileData) setProfile(profileData);
       if (finalPharmacy) setPharmacy(finalPharmacy);
-      if (finalRole) setRole(finalRole);
+      setRole(finalRole);
 
-      // Update sessionStorage cache
       sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
         pharmacy: finalPharmacy,
         profile: profileData,
@@ -157,9 +172,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error) {
       console.error('Critical error in fetchFullProfile:', error);
-      fetchPromise.current = null; // Allow retrying on error
+      fetchPromise.current = null;
     } finally {
-      if (resolveFetch) resolveFetch();
+      resolveFetch?.();
     }
   }, []);
 
