@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { toast } from 'sonner';
+
+const AUTH_CACHE_KEY = 'pharmconnect_auth_cache';
 
 export type UserRole = 'super_admin' | 'pharmacy_admin' | 'pharmacy_staff';
 
@@ -52,44 +54,112 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setLoading] = useState(true);
 
-  const fetchFullProfile = useCallback(async (userId: string) => {
+  // Initialize from cache for instant UI response
+  useEffect(() => {
+    const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
+    if (cached) {
+      try {
+        const { pharmacy: cPharmacy, profile: cProfile, role: cRole } = JSON.parse(cached);
+        if (cPharmacy) setPharmacy(cPharmacy);
+        if (cProfile) setProfile(cProfile);
+        if (cRole) setRole(cRole);
+      } catch (e) {
+        sessionStorage.removeItem(AUTH_CACHE_KEY);
+      }
+    }
+  }, []);
+
+  const fetchPromise = React.useRef<Promise<void> | null>(null);
+
+  const fetchFullProfile = useCallback(async (userId: string, forceRefresh = false) => {
     if (!isSupabaseConfigured) return;
+
+    // Check cache first if not forcing refresh
+    if (!forceRefresh) {
+      const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          // If we already have the profile for this user, skip the network request
+          if (parsed.profile?.id === userId && parsed.role) {
+             return; // State was already set in initial useEffect
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
+    }
+
+    if (fetchPromise.current && !forceRefresh) {
+      return fetchPromise.current;
+    }
+
+    let resolveFetch: () => void;
+    fetchPromise.current = new Promise<void>((resolve) => {
+      resolveFetch = resolve;
+    });
     
     try {
-      // 1. Fetch Global Profile
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      // 1. Try high-performance RPC first
+      const { data, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
       
-      if (profileError) throw profileError;
-      setProfile(profileData as UserProfile);
-      
-      // 2. Fetch Membership & Pharmacy
-      const { data: membershipData, error: memberError } = await supabase
-        .from('memberships')
-        .select(`
-          role,
-          pharmacy_id,
-          pharmacies (*)
-        `)
-        .eq('user_id', userId)
-        .maybeSingle();
+      let profileData: UserProfile | null = null;
+      let finalRole: UserRole | null = null;
+      let finalPharmacy: Pharmacy | null = null;
 
-      if (memberError) console.error('Membership fetch error:', memberError);
-      
-      if (membershipData) {
-        setPharmacy(membershipData.pharmacies as unknown as Pharmacy);
-        // If they have a pharmacy role, it overrides global_role for UI purposes if needed
-        // but usually we rely on the specific table they are in.
-        setRole(membershipData.role as UserRole);
+      if (!rpcError && data) {
+        profileData = data.profile;
+        if (data.membership) {
+          finalPharmacy = data.membership.pharmacy;
+          finalRole = data.membership.role;
+        } else if (profileData) {
+          finalRole = profileData.global_role;
+        }
       } else {
-        setRole(profileData.global_role as UserRole);
+        // 2. FALLBACK: Sequential fetch if RPC fails or is missing
+        console.warn('RPC failed, falling back to sequential fetch:', rpcError);
+        
+        const { data: pData, error: pError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+        
+        if (pError) throw pError;
+        profileData = pData as UserProfile;
+
+        const { data: mData } = await supabase
+          .from('memberships')
+          .select('role, pharmacy_id, pharmacies (*)')
+          .eq('user_id', userId)
+          .maybeSingle();
+        
+        if (mData) {
+          finalPharmacy = mData.pharmacies as unknown as Pharmacy;
+          finalRole = mData.role as UserRole;
+        } else if (profileData) {
+          finalRole = profileData.global_role as UserRole;
+        }
       }
 
+      // Update state
+      if (profileData) setProfile(profileData);
+      if (finalPharmacy) setPharmacy(finalPharmacy);
+      if (finalRole) setRole(finalRole);
+
+      // Update sessionStorage cache
+      sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
+        pharmacy: finalPharmacy,
+        profile: profileData,
+        role: finalRole,
+        timestamp: Date.now()
+      }));
+
     } catch (error) {
-      console.error('Error fetching full profile:', error);
+      console.error('Critical error in fetchFullProfile:', error);
+      fetchPromise.current = null; // Allow retrying on error
+    } finally {
+      if (resolveFetch) resolveFetch();
     }
   }, []);
 
@@ -102,6 +172,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUser(null);
     setProfile(null);
     setRole(null);
+    sessionStorage.removeItem(AUTH_CACHE_KEY);
+    fetchPromise.current = null;
 
     if (showMessage) {
       toast.info('You have been logged out.');
@@ -119,16 +191,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session) {
-        setUser(session.user);
-        await fetchFullProfile(session.user.id);
-      } else {
-        setUser(null);
-        setPharmacy(null);
-        setProfile(null);
-        setRole(null);
+      try {
+        if (session) {
+          setUser(session.user);
+          await fetchFullProfile(session.user.id);
+        } else {
+          setUser(null);
+          setPharmacy(null);
+          setProfile(null);
+          setRole(null);
+        }
+      } catch (e) {
+        console.error('Auth state change error:', e);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => subscription.unsubscribe();

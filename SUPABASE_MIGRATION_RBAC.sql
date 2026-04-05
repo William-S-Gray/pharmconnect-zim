@@ -110,13 +110,26 @@ ALTER TABLE public.drug_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pending_approvals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
+-- ** Admin Check Function (Prevents Recursion) **
+CREATE OR REPLACE FUNCTION public.is_super_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 
+    FROM public.profiles 
+    WHERE id = auth.uid() 
+    AND global_role = 'super_admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- ** Profiles Policies **
 CREATE POLICY "Users can read own profile" ON public.profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Super Admins can read all profiles" ON public.profiles FOR SELECT USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND global_role = 'super_admin'));
+CREATE POLICY "Super Admins can read all profiles" ON public.profiles FOR SELECT USING (public.is_super_admin());
 
 -- ** Memberships Policies **
 CREATE POLICY "Users can read own memberships" ON public.memberships FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Super Admins can manage all memberships" ON public.memberships FOR ALL USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND global_role = 'super_admin'));
+CREATE POLICY "Super Admins can manage all memberships" ON public.memberships FOR ALL USING (public.is_super_admin());
 
 -- ** Drug Requests Policies **
 CREATE POLICY "Pharmacies can read own requests" ON public.drug_requests FOR SELECT USING (EXISTS (SELECT 1 FROM public.memberships WHERE user_id = auth.uid() AND pharmacy_id = drug_requests.pharmacy_id));

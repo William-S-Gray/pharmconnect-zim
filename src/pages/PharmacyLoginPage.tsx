@@ -1,20 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Pill, Shield, Mail, ArrowLeft, Lock } from 'lucide-react';
+import { Pill, Shield, Mail, ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
 import { MathCaptcha } from '@/components/MathCaptcha';
 
 const PharmacyLoginPage = () => {
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, pharmacy, isSuperAdmin, user } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // 2FA state
@@ -30,17 +32,50 @@ const PharmacyLoginPage = () => {
   const [forgotSent, setForgotSent] = useState(false);
   const [forgotLoading, setForgotLoading] = useState(false);
   const [captchaVerified, setCaptchaVerified] = useState(false);
+  
+  useEffect(() => {
+    const mode = searchParams.get('mode');
+    const emailParam = searchParams.get('email');
+    
+    if (mode === 'forgot') {
+      setShowForgot(true);
+      if (emailParam) {
+        setForgotEmail(emailParam);
+      }
+    } else if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    // If navigation should happen after state commit, do it here
+    if (isSuperAdmin) {
+      navigate('/admin');
+    } else if (pharmacy) {
+      navigate('/dashboard');
+    } else if (user && !pharmacy && !isSuperAdmin) {
+      setIsLoading(false);
+      toast.error('No associated pharmacy or admin role found for this user.');
+    }
+  }, [pharmacy, isSuperAdmin, user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setIsLoading(true);
+      performance.mark('login-start');
+      
       await login(email, password);
+      
+      performance.mark('login-end');
+      const measure = performance.measure('Login Duration', 'login-start', 'login-end');
+      console.log(`Login took ${measure.duration.toFixed(2)}ms`);
+      
       toast.success('Welcome back!');
+      // Navigate is handled by the useEffect above once pharmacy state propagates
     } catch (error: any) {
       toast.error(error.message || 'Invalid email or password.');
-    } finally {
-      setIsLoading(false);
+      setIsLoading(false); // Only stop loading on error, let it spin until navigation if successful
     }
   };
 
@@ -194,28 +229,29 @@ const PharmacyLoginPage = () => {
                 </div>
                 <div>
                   <Label htmlFor="password">Password</Label>
-                  <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required className="h-11" />
+                  <div className="relative mt-1">
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"} 
+                      value={password} 
+                      onChange={e => setPassword(e.target.value)} 
+                      required 
+                      className="h-11 pr-10" 
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
                 <div className="text-right">
                   <button type="button" className="text-sm text-primary hover:underline" onClick={() => setShowForgot(true)}>Forgot password?</button>
                 </div>
                 <Button type="submit" className="w-full h-11" disabled={isLoading}>
                   {isLoading ? 'Signing in...' : 'Sign In'}
-                </Button>
-                <div className="relative my-2">
-                  <div className="absolute inset-0 flex items-center"><span className="w-full border-t" /></div>
-                  <div className="relative flex justify-center text-xs uppercase"><span className="bg-card px-2 text-muted-foreground">or</span></div>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-11"
-                  onClick={() => {
-                    setEmail('demo@pharmtrack.co.zw');
-                    setPassword('demo1234');
-                  }}
-                >
-                  Use Demo Credentials
                 </Button>
               </form>
 

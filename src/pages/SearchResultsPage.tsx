@@ -85,8 +85,8 @@ const SearchResultsPage = () => {
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             distance = Math.round(R * c * 10) / 10;
           } else {
-            // Fallback estimation
-            distance = Math.round((Math.random() * 5 + 0.5) * 10) / 10;
+            // Null if no location available
+            distance = 0;
           }
 
           return {
@@ -176,6 +176,25 @@ const SearchResultsPage = () => {
                 <p className="text-sm text-muted-foreground">{sorted.length} pharmacy{sorted.length !== 1 ? 'ies' : ''} found</p>
               </div>
               <div className="flex items-center gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-9 btn-skeu-outline gap-1.5"
+                  onClick={() => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition((pos) => {
+                        setSearchParams({ 
+                          drug: drugQuery, 
+                          city: cityParam, 
+                          lat: pos.coords.latitude.toString(), 
+                          lng: pos.coords.longitude.toString() 
+                        });
+                      });
+                    }
+                  }}
+                >
+                  <MapIcon className="w-3.5 h-3.5" /> Detect My Location
+                </Button>
                 <div className="flex bg-muted p-1 rounded-lg mr-2 lg:hidden">
                   <Button 
                     variant={viewMode === 'list' ? 'secondary' : 'ghost'} 

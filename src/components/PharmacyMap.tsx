@@ -1,6 +1,8 @@
 import React, { useMemo, useCallback, useState } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
+import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
+import { useSearchStore } from '@/stores/searchStore';
 
 interface PharmacyMarker {
   pharmacy_id: string;
@@ -40,6 +42,17 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
   });
 
   const [selected, setSelected] = useState<PharmacyMarker | null>(null);
+  const [distanceInfo, setDistanceInfo] = useState<DistanceMatrixResult | null>(null);
+  const { userLat, userLng } = useSearchStore();
+
+  const handleSelect = async (marker: PharmacyMarker) => {
+    setSelected(marker);
+    setDistanceInfo(null);
+    if (userLat && userLng) {
+      const info = await getDrivingDistance({ lat: userLat, lng: userLng }, { lat: marker.lat, lng: marker.lng });
+      setDistanceInfo(info);
+    }
+  };
 
   const mapCenter = useMemo(() => {
     if (center) return center;
@@ -73,22 +86,27 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
         <Marker
           key={marker.pharmacy_id}
           position={{ lat: marker.lat, lng: marker.lng }}
-          onClick={() => setSelected(marker)}
           icon={{
             url: getMarkerIcon(marker.stock_status),
             scaledSize: new window.google.maps.Size(30, 30),
           }}
+          onClick={() => handleSelect(marker)}
         />
       ))}
 
       {selected && (
         <InfoWindow
           position={{ lat: selected.lat, lng: selected.lng }}
-          onCloseClick={() => setSelected(null)}
+          onCloseClick={() => { setSelected(null); setDistanceInfo(null); }}
         >
           <div className="p-2 min-w-[200px]">
             <h4 className="font-heading font-semibold text-sm">{selected.pharmacy_name}</h4>
-            <p className="text-xs text-muted-foreground mb-2">{selected.suburb}, {selected.city}</p>
+            <p className="text-xs text-muted-foreground mb-1">{selected.suburb}, {selected.city}</p>
+            {distanceInfo && (
+              <p className="text-[10px] font-medium text-accent mb-2">
+                🚗 {distanceInfo.distance_text} · {distanceInfo.duration_text} drive
+              </p>
+            )}
             <div className="flex items-center justify-between gap-2 mt-1">
               <StockStatusBadge status={selected.stock_status} />
               {selected.unit_price && (
@@ -108,7 +126,6 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
 
 function getMarkerIcon(status: StockStatus): string {
   // Return different colored pins based on status
-  // For demo, we use data URLs or placeholders
   if (status === 'IN_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/green-dot.png';
   if (status === 'LOW_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png';
   return 'https://maps.google.com/mapfiles/ms/icons/red-dot.png';

@@ -6,10 +6,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Pill, ArrowLeft } from 'lucide-react';
+import { Pill, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const PharmacyRegisterPage = () => {
   const navigate = useNavigate();
@@ -19,6 +27,8 @@ const PharmacyRegisterPage = () => {
     phone: '', email: '', mcazLicense: '',
     password: '', confirmPassword: '', agreedToTerms: false,
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,6 +44,8 @@ const PharmacyRegisterPage = () => {
     try {
       setIsLoading(true);
       
+      // Proceed with signUp
+      performance.mark('signup-start');
       const { data, error } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
@@ -47,7 +59,23 @@ const PharmacyRegisterPage = () => {
         }
       });
 
-      if (error) throw error;
+      if (error) {
+        if (error.message.toLowerCase().includes('already registered')) {
+          setShowDuplicateModal(true);
+          return;
+        }
+        throw error;
+      }
+      
+      // With email enumeration protection, user is returned but identities is empty if they already exist
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+          setShowDuplicateModal(true);
+          return;
+      }
+
+      performance.mark('signup-end');
+      const measure = performance.measure('Signup Duration', 'signup-start', 'signup-end');
+      console.log(`Signup took ${measure.duration.toFixed(2)}ms`);
 
       if (data.user) {
         toast.success('Registration successful! Please check your email for a confirmation link.');
@@ -109,10 +137,38 @@ const PharmacyRegisterPage = () => {
             <h3 className="font-heading font-semibold text-sm text-muted-foreground uppercase tracking-wide pt-2 text-emboss">Account</h3>
             <div>
               <Label htmlFor="password">Password *</Label>
-              <Input id="password" type="password" value={form.password} onChange={e => setForm({...form, password: e.target.value})} required className="h-11" />
+              <div className="relative mt-1">
+                <Input 
+                  id="password" 
+                  type={showPassword ? "text" : "password"} 
+                  value={form.password} 
+                  onChange={e => setForm({...form, password: e.target.value})} 
+                  required 
+                  className="h-11 pr-10" 
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
               <PasswordStrengthMeter password={form.password} />
             </div>
-            <div><Label htmlFor="confirmPassword">Confirm Password *</Label><Input id="confirmPassword" type="password" value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} required className="h-11" /></div>
+            <div>
+              <Label htmlFor="confirmPassword">Confirm Password *</Label>
+              <div className="relative mt-1">
+                <Input 
+                  id="confirmPassword" 
+                  type={showPassword ? "text" : "password"} 
+                  value={form.confirmPassword} 
+                  onChange={e => setForm({...form, confirmPassword: e.target.value})} 
+                  required 
+                  className="h-11 pr-10" 
+                />
+              </div>
+            </div>
 
             <div className="flex items-start gap-2 pt-1">
               <Checkbox id="terms" checked={form.agreedToTerms} onCheckedChange={(v) => setForm({...form, agreedToTerms: v === true})} />
@@ -128,8 +184,38 @@ const PharmacyRegisterPage = () => {
             Already registered? <Link to="/pharmacy/login" className="text-primary hover:underline">Sign in</Link>
           </p>
         </div>
+      <Dialog open={showDuplicateModal} onOpenChange={setShowDuplicateModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader className="text-center">
+            <DialogTitle className="text-xl font-heading text-emboss">Account Already Exists</DialogTitle>
+            <DialogDescription className="pt-2">
+              The email <strong className="text-foreground">{form.email}</strong> is already associated with a pharmacy account.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 text-center text-sm text-muted-foreground">
+            Would you like to sign in to your existing account or reset your password if you've forgotten it?
+          </div>
+          <DialogFooter className="flex flex-col sm:flex-row gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              className="flex-1 h-11"
+              onClick={() => navigate(`/pharmacy/login?email=${encodeURIComponent(form.email)}`)}
+            >
+              Sign In
+            </Button>
+            <Button 
+              type="button" 
+              className="flex-1 h-11"
+              onClick={() => navigate(`/pharmacy/login?mode=forgot&email=${encodeURIComponent(form.email)}`)}
+            >
+              Reset Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+        </div>
       </div>
-    </div>
   );
 };
 

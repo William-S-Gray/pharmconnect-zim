@@ -58,9 +58,9 @@ const AdminOverviewPage = () => {
         pending_approvals: pending || 0,
         total_pharmacies: total || 0,
         total_drugs: drugs || 0,
-        searches_today: 142, // Mock or fetch search_logs
-        stock_alerts: 12,    // Mock or fetch from stock alerting
-        growth_30d: 8,       // Mock calculation
+        searches_today: 0, // Requires search_logs table
+        stock_alerts: 0,    // Requires stock_inventory table
+        growth_30d: 0,       // Calculation based on pharmacy growth
       };
     },
     placeholderData: fallbackStats,

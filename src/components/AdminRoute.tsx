@@ -3,9 +3,8 @@ import { useAuth } from '@/context/AuthContext';
 import { FullPageSpinner } from './LoadingSpinner';
 
 export const AdminRoute = ({ children }: { children: React.ReactNode }) => {
-  const { pharmacy, isLoading, isAdmin } = useAuth();
+  const { isSuperAdmin, isLoading } = useAuth();
   if (isLoading) return <FullPageSpinner />;
-  if (!pharmacy) return <Navigate to="/pharmacy/login" replace />;
-  if (!isAdmin) return <Navigate to="/dashboard" replace />;
+  if (!isSuperAdmin) return <Navigate to="/pharmacy/login" replace />;
   return <>{children}</>;
 };

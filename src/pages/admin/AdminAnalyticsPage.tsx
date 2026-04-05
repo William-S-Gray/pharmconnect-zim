@@ -67,16 +67,8 @@ const AdminAnalyticsPage = () => {
         .map(([month, pharmacies]) => ({ month, pharmacies }))
         .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
 
-      // Mock search data as it requires a search_logs table
-      const dailySearches = [
-        { day: 'Mon', searches: 120 },
-        { day: 'Tue', searches: 150 },
-        { day: 'Wed', searches: 180 },
-        { day: 'Thu', searches: 140 },
-        { day: 'Fri', searches: 210 },
-        { day: 'Sat', searches: 90 },
-        { day: 'Sun', searches: 60 },
-      ];
+      // Mock search data would require a search_logs table
+      const dailySearches: { day: string; searches: number }[] = [];
 
       return {
         summary: [
@@ -86,18 +78,8 @@ const AdminAnalyticsPage = () => {
           { label: 'System Health', value: '99.9%' },
         ],
         daily_searches: dailySearches,
-        stock_distribution: [
-          { name: 'In Stock', value: 65, color: '#10b981' },
-          { name: 'Low Stock', value: 20, color: '#f59e0b' },
-          { name: 'Out of Stock', value: 15, color: '#ef4444' },
-        ],
-        top_drugs: [
-          { name: 'Paracetamol', searches: 450 },
-          { name: 'Amoxicillin', searches: 320 },
-          { name: 'Ibuprofen', searches: 280 },
-          { name: 'Metformin', searches: 210 },
-          { name: 'Cetirizine', searches: 190 },
-        ],
+        stock_distribution: [],
+        top_drugs: [],
         registration_trend: registrationTrend.length > 0 ? registrationTrend : [{ month: format(new Date(), 'MMM yyyy'), pharmacies: pharmacyCount || 0 }],
         city_breakdown: cityBreakdown,
       };

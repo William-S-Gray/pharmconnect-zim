@@ -26,31 +26,44 @@ const PharmacyDashboard = () => {
     queryFn: async () => {
       if (!isSupabaseConfigured || !pharmacy?.id) return null;
       
-      // 1. Total Drugs Listed
-      const { count: totalCount } = await supabase
-        .from('pharmacy_stock')
-        .select('*', { count: 'exact', head: true })
-        .eq('pharmacy_id', pharmacy.id);
+      // Fetch all stats in parallel for speed
+      const [totalRes, stockRes, trendingRes, cityCountRes] = await Promise.all([
+        // 1. Total Drugs Listed
+        supabase
+          .from('pharmacy_stock')
+          .select('*', { count: 'exact', head: true })
+          .eq('pharmacy_id', pharmacy.id),
 
-      // 2. Low Stock Items
-      const { data: stockItems } = await supabase
-        .from('pharmacy_stock')
-        .select('quantity, threshold')
-        .eq('pharmacy_id', pharmacy.id);
-      
-      const lowStockCount = (stockItems || []).filter(s => s.quantity <= s.threshold).length;
+        // 2. Low Stock Items
+        supabase
+          .from('pharmacy_stock')
+          .select('quantity, threshold')
+          .eq('pharmacy_id', pharmacy.id),
 
-      // 3. System-wide Trending Searches (Filtered by City)
-      const { data: trending } = await supabase
-        .from('drug_searches')
-        .select('query, result_count')
-        .eq('city', pharmacy.city)
-        .order('created_at', { ascending: false })
-        .limit(30);
+        // 3. System-wide Trending Searches
+        supabase
+          .from('drug_searches')
+          .select('query, result_count')
+          .eq('city', pharmacy.city)
+          .order('created_at', { ascending: false })
+          .limit(30),
+
+        // 4. Searches this month in this city
+        supabase
+          .from('drug_searches')
+          .select('*', { count: 'exact', head: true })
+          .eq('city', pharmacy.city)
+      ]);
+
+      const totalCount = totalRes.count || 0;
+      const stockItems = stockRes.data || [];
+      const lowStockCount = stockItems.filter(s => s.quantity <= s.threshold).length;
+      const trending = trendingRes.data || [];
+      const searchesInCity = cityCountRes.count || 0;
 
       // Aggregate trending queries
       const queryCounts: Record<string, number> = {};
-      trending?.forEach(t => {
+      trending.forEach(t => {
         queryCounts[t.query] = (queryCounts[t.query] || 0) + 1;
       });
 
@@ -59,18 +72,12 @@ const PharmacyDashboard = () => {
         .sort((a, b) => b.search_count - a.search_count)
         .slice(0, 5);
 
-      // 4. Searches this month for this pharmacy (simplified proxy - total searches in their city)
-      const { count: searchesInCity } = await supabase
-        .from('drug_searches')
-        .select('*', { count: 'exact', head: true })
-        .eq('city', pharmacy.city);
-
       return {
-        searches_this_month: searchesInCity || 0,
-        stock: { total: totalCount || 0, low_stock: lowStockCount },
+        searches_this_month: searchesInCity,
+        stock: { total: totalCount, low_stock: lowStockCount },
         plan_tier: pharmacy.plan_tier,
         top_searched_drugs: topSearchedDrugs,
-        recent_alerts: [] // To be implemented with alert history table
+        recent_alerts: [] 
       };
     },
     enabled: !!pharmacy?.id && isSupabaseConfigured,

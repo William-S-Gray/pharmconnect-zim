@@ -47,21 +47,8 @@ const actionIcons: Record<string, typeof Shield> = {
   view: Eye,
 };
 
-// Demo fallback data
-const demoAuditLog: AuditEntry[] = [
-  { id: '1', timestamp: new Date(Date.now() - 5 * 60000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'login', category: 'auth', target: 'Admin Session', detail: 'Admin logged in successfully', ip_address: '192.168.1.10' },
-  { id: '2', timestamp: new Date(Date.now() - 15 * 60000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'update', category: 'user_mgmt', target: 'HealthPlus Pharmacy', detail: 'Changed status from PENDING to APPROVED', ip_address: '192.168.1.10' },
-  { id: '3', timestamp: new Date(Date.now() - 30 * 60000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'create', category: 'drug_mgmt', target: 'Amoxicillin 500mg', detail: 'Added new drug to database', ip_address: '192.168.1.10' },
-  { id: '4', timestamp: new Date(Date.now() - 45 * 60000).toISOString(), user_email: 'demo@pharmtrack.co.zw', user_role: 'pharmacy', action: 'update', category: 'stock', target: 'Paracetamol 500mg', detail: 'Updated stock quantity from 100 to 250', ip_address: '10.0.0.5' },
-  { id: '5', timestamp: new Date(Date.now() - 60 * 60000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'delete', category: 'user_mgmt', target: 'Inactive Pharmacy', detail: 'Removed suspended pharmacy account', ip_address: '192.168.1.10' },
-  { id: '6', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(), user_email: 'demo@pharmtrack.co.zw', user_role: 'pharmacy', action: 'login', category: 'auth', target: 'Pharmacy Session', detail: 'Pharmacy user logged in', ip_address: '10.0.0.5' },
-  { id: '7', timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'update', category: 'settings', target: 'System Config', detail: 'Updated notification preferences', ip_address: '192.168.1.10' },
-  { id: '8', timestamp: new Date(Date.now() - 4 * 3600000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'update', category: 'drug_mgmt', target: 'Metformin 850mg', detail: 'Updated dosage form from tablet to capsule', ip_address: '192.168.1.10' },
-  { id: '9', timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), user_email: 'demo@pharmtrack.co.zw', user_role: 'pharmacy', action: 'create', category: 'stock', target: 'Ibuprofen 400mg', detail: 'Added new stock item with qty 500', ip_address: '10.0.0.5' },
-  { id: '10', timestamp: new Date(Date.now() - 6 * 3600000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'view', category: 'system', target: 'Security Audit', detail: 'Viewed system security audit report', ip_address: '192.168.1.10' },
-  { id: '11', timestamp: new Date(Date.now() - 24 * 3600000).toISOString(), user_email: 'admin@pharmtrack.co.zw', user_role: 'admin', action: 'create', category: 'user_mgmt', target: 'New Pharmacy', detail: 'Manually created pharmacy account', ip_address: '192.168.1.10' },
-  { id: '12', timestamp: new Date(Date.now() - 48 * 3600000).toISOString(), user_email: 'demo@pharmtrack.co.zw', user_role: 'pharmacy', action: 'logout', category: 'auth', target: 'Pharmacy Session', detail: 'User logged out', ip_address: '10.0.0.5' },
-];
+// Audit logs will be fetched directly from Supabase
+const demoAuditLog: AuditEntry[] = [];
 
 const AdminAuditLogPage = () => {
   const [search, setSearch] = useState('');

@@ -12,15 +12,6 @@ In Zimbabwe, patients often visit multiple pharmacies before finding the medicin
 
 ---
 
-## 🔑 Demo Credentials
-
-| Role | Email | Password | Access |
-|------|-------|----------|--------|
-| **Admin** | `admin@pharmtrack.co.zw` | `admin1234` | Full admin dashboard (`/admin`) |
-| **Pharmacy** | `demo@pharmtrack.co.zw` | `demo1234` | Pharmacy dashboard (`/dashboard`) |
-
-> These demo accounts bypass backend auth and work out of the box for testing.
-
 ---
 
 ## ✨ Features

@@ -26,7 +26,7 @@ export function LoadingSpinner({ size = 'md', label, className }: LoadingSpinner
 
 export function FullPageSpinner({ label = 'Loading...' }: { label?: string }) {
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center animate-in fade-in duration-500">
       <LoadingSpinner size="lg" label={label} />
     </div>
   );

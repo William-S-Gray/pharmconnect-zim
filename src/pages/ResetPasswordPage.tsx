@@ -4,7 +4,7 @@ import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { KeyRound, ArrowLeft, CheckCircle } from 'lucide-react';
+import { KeyRound, ArrowLeft, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabaseClient';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
@@ -16,10 +16,22 @@ const ResetPasswordPage = () => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [isValidToken, setIsValidToken] = useState(true);
 
   useEffect(() => {
-    if (!token) setIsValidToken(false);
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      // Supabase recovery links put the session in the URL hash, 
+      // which automatically populates the session on load.
+      if (!session && !token) {
+        setIsValidToken(false);
+      } else {
+        setIsValidToken(true);
+      }
+    };
+    
+    checkSession();
   }, [token]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -84,26 +96,37 @@ const ResetPasswordPage = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <Label htmlFor="password">New Password</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="h-11"
-                />
+                <div className="relative mt-1">
+                  <Input 
+                    id="password" 
+                    type={showPassword ? "text" : "password"} 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    required 
+                    className="h-11 pr-10" 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
                 <PasswordStrengthMeter password={password} />
               </div>
               <div>
                 <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="h-11"
-                />
+                <div className="relative mt-1">
+                  <Input 
+                    id="confirmPassword" 
+                    type={showPassword ? "text" : "password"} 
+                    value={confirmPassword} 
+                    onChange={(e) => setConfirmPassword(e.target.value)} 
+                    required 
+                    className="h-11 pr-10" 
+                  />
+                </div>
               </div>
               <Button type="submit" className="w-full h-11" disabled={isLoading}>
                 {isLoading ? 'Resetting...' : 'Reset Password'}
