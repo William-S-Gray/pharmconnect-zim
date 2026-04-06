@@ -10,6 +10,7 @@ import { Pill, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
+import { pharmacyRegisterSchema } from '@/lib/schemas';
 import {
   Dialog,
   DialogContent,
@@ -32,9 +33,16 @@ const PharmacyRegisterPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // 0. Validate with Zod
+    const validation = pharmacyRegisterSchema.safeParse(form);
+    if (!validation.success) {
+      const errorMsg = validation.error.errors[0]?.message || 'Invalid input';
+      toast.error(errorMsg);
+      return;
+    }
+
     if (!form.agreedToTerms) { toast.error('You must agree to the terms'); return; }
-    if (form.password !== form.confirmPassword) { toast.error("Passwords don't match"); return; }
-    if (!isPasswordValid(form.password)) { toast.error('Password does not meet all requirements'); return; }
 
     if (!isSupabaseConfigured) {
       toast.error('Supabase is not configured. Please check your .env file.');

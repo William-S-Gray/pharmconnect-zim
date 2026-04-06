@@ -231,10 +231,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error('Supabase not configured. Please check your .env file.');
     }
 
+    // 1. Check rate limit before attempting login
+    try {
+      const { data: isAllowed, error: rateLimitError } = await supabase.rpc('check_login_rate_limit', { 
+        p_email: email.toLowerCase().trim() 
+      });
+
+      if (!rateLimitError && isAllowed === false) {
+        throw new Error('Too many login attempts. Please try again in 15 minutes.');
+      }
+    } catch (e: any) {
+      if (e.message.includes('Too many login attempts')) throw e;
+      console.warn('Rate limit service unavailable, proceeding with caution:', e);
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
+
+    // 2. Log the attempt results
+    try {
+      await supabase.rpc('log_login_attempt', { 
+        p_email: email.toLowerCase().trim(), 
+        p_success: !error 
+      });
+    } catch (e) {
+      console.warn('Failed to log login attempt:', e);
+    }
 
     if (error) throw error;
     

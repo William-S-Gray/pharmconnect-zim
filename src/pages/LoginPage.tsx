@@ -8,7 +8,7 @@ import { Pill, Shield, Mail, ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabaseClient';
-import { MathCaptcha } from '@/components/MathCaptcha';
+import { loginSchema } from '@/lib/schemas';
 
 const LoginPage = () => {
   const [searchParams] = useSearchParams();
@@ -63,6 +63,16 @@ const LoginPage = () => {
     e.preventDefault();
     try {
       setIsLoading(true);
+
+      // 0. Validate input with Zod
+      const validation = loginSchema.safeParse({ email, password });
+      if (!validation.success) {
+        const errorMsg = validation.error.errors[0]?.message || 'Invalid input';
+        toast.error(errorMsg);
+        setIsLoading(false);
+        return;
+      }
+
       performance.mark('login-start');
       
       await login(email, password);
