@@ -1,11 +1,12 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ConnectivityBanner } from './ConnectivityBanner';
 
 const adminNavItems = [
   { label: 'Overview', icon: LayoutDashboard, path: '/admin' },
@@ -13,10 +14,11 @@ const adminNavItems = [
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Pharmacies', icon: Store, path: '/admin/pharmacies' },
-  { label: 'Staff', icon: UserCog, path: '/admin/staff' },
+  { label: 'User Management', icon: Users, path: '/admin/users' },
   { label: 'Delete Requests', icon: ShieldAlert, path: '/admin/delete-requests', badgeKey: 'deleteRequests' },
   { label: 'System Trash', icon: Trash2, path: '/admin/trash' },
   { label: 'Audit Log', icon: ScrollText, path: '/admin/audit-log' },
+  { label: 'Sync Conflicts', icon: AlertTriangle, path: '/admin/conflicts', badgeKey: 'conflicts' },
   { label: 'Settings', icon: Settings, path: '/admin/profile' },
 ];
 
@@ -35,7 +37,20 @@ export function AdminLayout() {
       if (error) return 0;
       return count || 0;
     },
-    refetchInterval: 30000, // Poll every 30s as fallback to realtime
+    refetchInterval: 30000,
+  });
+
+  const { data: conflictsCount = 0 } = useQuery({
+    queryKey: ['admin', 'conflicts-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('sync_conflicts')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'PENDING');
+      if (error) return 0;
+      return count || 0;
+    },
+    refetchInterval: 30000,
   });
 
   const handleLogout = () => {
@@ -44,8 +59,10 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
+    <div className="min-h-screen bg-background flex flex-col">
+      <ConnectivityBanner />
+      <div className="flex-1 flex">
+        <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
         <div className="p-4 border-b border-border">
           <Link to="/admin" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-destructive/90 shadow-sm">
@@ -86,6 +103,11 @@ export function AdminLayout() {
                 {item.label === 'Delete Requests' && pendingCount > 0 && (
                   <Badge className="ml-auto bg-orange-500 text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
                     {pendingCount}
+                  </Badge>
+                )}
+                {item.label === 'Sync Conflicts' && conflictsCount > 0 && (
+                  <Badge className="ml-auto bg-primary text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
+                    {conflictsCount}
                   </Badge>
                 )}
               </Link>
@@ -131,6 +153,7 @@ export function AdminLayout() {
           <Outlet />
         </div>
       </main>
+    </div>
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2 } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
@@ -7,15 +7,18 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PersistentAlertList } from '@/components/PersistentAlertList';
+import { ConnectivityBanner } from './ConnectivityBanner';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Requested Drugs', icon: MessageCircle, path: '/dashboard/requests' },
   { label: 'Inventory', icon: Package, path: '/dashboard/stock' },
   { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
-  { label: 'Staff Management', icon: Users, path: '/dashboard/staff', adminOnly: true },
+  { label: 'User Management', icon: Users, path: '/dashboard/users', adminOnly: true },
+  { label: 'Analytics', icon: BarChart3, path: '/dashboard/analytics', adminOnly: true },
   { label: 'Delete Requests', icon: ShieldAlert, path: '/dashboard/delete-requests', adminOnly: true },
   { label: 'Pharmacy Trash', icon: Trash2, path: '/dashboard/trash', adminOnly: true },
+  { label: 'Sync Conflicts', icon: AlertTriangle, path: '/dashboard/conflicts', adminOnly: true },
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
@@ -43,15 +46,34 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
     refetchInterval: 30000,
   });
 
+  const { data: conflictsCount = 0 } = useQuery({
+    queryKey: ['pharmacy', 'conflicts-count', pharmacy?.id],
+    queryFn: async () => {
+      if (!pharmacy?.id) return 0;
+      const { count, error } = await supabase
+        .from('sync_conflicts')
+        .select('*', { count: 'exact', head: true })
+        .eq('pharmacy_id', pharmacy.id)
+        .eq('status', 'PENDING');
+      if (error) return 0;
+      return count || 0;
+    },
+    enabled: !!pharmacy?.id && role === 'pharmacy_admin',
+    refetchInterval: 30000,
+  });
+
   const handleLogout = () => {
     logout();
     navigate('/');
   };
 
   return (
-    <div className="min-h-screen bg-background flex">
-      {/* Sidebar */}
-      <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
+    <div className="min-h-screen bg-background flex flex-col">
+      <ConnectivityBanner />
+      {/* Sidebar Wrapper */}
+      <div className="flex-1 flex">
+        {/* Sidebar */}
+        <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
         <div className="p-4 border-b border-border">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center brand-icon-skeu">
@@ -92,6 +114,11 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
                 {item.label === 'Delete Requests' && pendingCount > 0 && (
                   <Badge className="ml-auto bg-orange-500 text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
                     {pendingCount}
+                  </Badge>
+                )}
+                {item.label === 'Sync Conflicts' && conflictsCount > 0 && (
+                  <Badge className="ml-auto bg-primary text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
+                    {conflictsCount}
                   </Badge>
                 )}
               </Link>
@@ -138,6 +165,7 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
           <Outlet />
         </div>
       </main>
+    </div>
     </div>
   );
 }

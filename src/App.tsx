@@ -27,6 +27,7 @@ const PharmacyApprovalsPage = lazy(() => import("./pages/PharmacyApprovalsPage")
 const PharmacyStaffPage = lazy(() => import("./pages/PharmacyStaffPage"));
 const PharmacyDeleteRequestsPage = lazy(() => import("./pages/PharmacyDeleteRequestsPage"));
 const TrashPage = lazy(() => import("./pages/TrashPage"));
+const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage"));
 
 // Admin pages
 const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
@@ -38,6 +39,7 @@ const AdminStaffPage = lazy(() => import("./pages/admin/AdminStaffPage"));
 const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
 const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 const AdminDeleteRequestsPage = lazy(() => import("./pages/admin/AdminDeleteRequestsPage"));
+const ConflictManagementPage = lazy(() => import("./pages/admin/ConflictManagementPage"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,13 +82,16 @@ const App = () => (
               <Route path="stock" element={<StockManagementPage />} />
               <Route path="requests" element={<PharmacyRequestsPage />} />
               <Route path="approvals" element={<PharmacyApprovalsPage />} />
-              <Route path="staff" element={<PharmacyStaffPage />} />
+              <Route path="staff" element={<UserManagementPage />} />
+              <Route path="users" element={<UserManagementPage />} />
+              <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="delete-requests" element={<PharmacyDeleteRequestsPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="subscription" element={<SubscriptionPage />} />
               <Route path="alerts" element={<AlertSettingsPage />} />
               <Route path="profile" element={<PharmacyProfilePage />} />
               <Route path="security" element={<SecurityAuditPage />} />
+              <Route path="conflicts" element={<ConflictManagementPage />} />
             </Route>
             <Route path="/admin" element={
               <AdminRoute>
@@ -98,11 +103,13 @@ const App = () => (
               <Route path="analytics" element={<AdminAnalyticsPage />} />
               <Route path="drugs" element={<AdminDrugsPage />} />
               <Route path="pharmacies" element={<AdminPharmaciesPage />} />
-              <Route path="staff" element={<AdminStaffPage />} />
+              <Route path="staff" element={<UserManagementPage />} />
+              <Route path="users" element={<UserManagementPage />} />
               <Route path="delete-requests" element={<AdminDeleteRequestsPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="audit-log" element={<AdminAuditLogPage />} />
               <Route path="profile" element={<AdminProfilePage />} />
+              <Route path="conflicts" element={<ConflictManagementPage />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

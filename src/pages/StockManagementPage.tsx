@@ -20,6 +20,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Plus, Search, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { syncManager } from '@/lib/syncManager';
 
 interface StockItem {
   id: string;
@@ -69,7 +70,8 @@ const StockManagementPage = () => {
             form
           )
         `)
-        .eq('pharmacy_id', pharmacy.id);
+        .eq('pharmacy_id', pharmacy.id)
+        .gte('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
         
       if (error) throw error;
       
@@ -128,6 +130,11 @@ const StockManagementPage = () => {
         return;
       }
 
+      if (!navigator.onLine) {
+        syncManager.enqueue('pharmacy_stock', 'INSERT', { ...payload, pharmacy_id: pharmacy?.id }, { userId: user?.id, pharmacyId: pharmacy?.id });
+        return;
+      }
+
       const { error } = await supabase
         .from('pharmacy_stock')
         .insert([{ ...payload, pharmacy_id: pharmacy?.id }]);
@@ -157,6 +164,11 @@ const StockManagementPage = () => {
           }]);
         if (error) throw error;
         toast.info('Update request sent to admin');
+        return;
+      }
+
+      if (!navigator.onLine) {
+        syncManager.enqueue('pharmacy_stock', 'UPDATE', { id: drugId, ...data }, { userId: user?.id, pharmacyId: pharmacy?.id });
         return;
       }
 
@@ -190,6 +202,11 @@ const StockManagementPage = () => {
           }]);
         if (error) throw error;
         toast.info('Delete request sent to admin');
+        return;
+      }
+
+      if (!navigator.onLine) {
+        syncManager.enqueue('pharmacy_stock', 'DELETE', { id: drugId }, { userId: user?.id, pharmacyId: pharmacy?.id });
         return;
       }
 

@@ -463,7 +463,7 @@ const AdminPharmaciesPage = () => {
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewUser(null)}>Close</Button>
             <Button onClick={() => { if (viewUser) openEdit(viewUser); setViewUser(null); }}>
-              <Pencil className="w-3.5 h-3.5 mr-1" /> Edit
+              <Edit className="w-3.5 h-3.5 mr-1" /> Edit
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -490,7 +490,7 @@ const AdminPharmaciesPage = () => {
       <Dialog open={!!editUser} onOpenChange={() => setEditUser(null)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2"><Pencil className="w-5 h-5" /> Edit User</DialogTitle>
+            <DialogTitle className="flex items-center gap-2"><Edit className="w-5 h-5" /> Edit User</DialogTitle>
             <DialogDescription>Update pharmacy account details</DialogDescription>
           </DialogHeader>
           {renderFormFields(false)}
