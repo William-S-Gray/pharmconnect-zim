@@ -7,12 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { Search, MapPin, Ban, CheckCircle, CreditCard, Plus, Eye, Pencil, Trash2, UserPlus } from 'lucide-react';
+import { Plus, Search, Store, MapPin, Phone, Trash2, Edit, RotateCcw, Eye, UserPlus, Ban, CheckCircle, CreditCard } from 'lucide-react';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
+import { requestDeletion } from '@/lib/lifecycleUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -200,18 +201,14 @@ const AdminPharmaciesPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+       await requestDeletion('pharmacies', id, 'Administrative closure / permanent removal');
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
-      toast.success('User deleted successfully');
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
+      toast.success('Pharmacy moved to system trash queue.');
       setDeleteUser(null);
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to delete user'),
+    onError: (error: any) => toast.error(error.message || 'Failed to trash pharmacy'),
   });
 
   const filtered = users.filter(u =>
@@ -392,7 +389,7 @@ const AdminPharmaciesPage = () => {
                       <Eye className="w-3.5 h-3.5" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => openEdit(u)} title="Edit">
-                      <Pencil className="w-3.5 h-3.5" />
+                      <Edit className="w-3.5 h-3.5" />
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => setDeleteUser(u)} title="Delete" className="text-destructive hover:text-destructive">
                       <Trash2 className="w-3.5 h-3.5" />

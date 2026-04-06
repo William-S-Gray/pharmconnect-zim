@@ -1,5 +1,8 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabaseClient';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -11,6 +14,8 @@ const navItems = [
   { label: 'Inventory', icon: Package, path: '/dashboard/stock' },
   { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
   { label: 'Staff Management', icon: Users, path: '/dashboard/staff', adminOnly: true },
+  { label: 'Delete Requests', icon: ShieldAlert, path: '/dashboard/delete-requests', adminOnly: true },
+  { label: 'Pharmacy Trash', icon: Trash2, path: '/dashboard/trash', adminOnly: true },
   { label: 'Alert Settings', icon: Bell, path: '/dashboard/alerts' },
   { label: 'Subscription', icon: CreditCard, path: '/dashboard/subscription' },
   { label: 'Profile', icon: Settings, path: '/dashboard/profile' },
@@ -21,6 +26,22 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { pharmacy, role, logout } = useAuth();
+  
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ['pharmacy', 'pending-delete-count', pharmacy?.id],
+    queryFn: async () => {
+      if (!pharmacy?.id) return 0;
+      const { count, error } = await supabase
+        .from('delete_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('pharmacy_id', pharmacy.id)
+        .eq('status', 'PENDING');
+      if (error) return 0;
+      return count || 0;
+    },
+    enabled: !!pharmacy?.id && role === 'pharmacy_admin',
+    refetchInterval: 30000,
+  });
 
   const handleLogout = () => {
     logout();
@@ -67,7 +88,12 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
                 )}
               >
                 <item.icon className="w-4 h-4" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.label === 'Delete Requests' && pendingCount > 0 && (
+                  <Badge className="ml-auto bg-orange-500 text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
+                    {pendingCount}
+                  </Badge>
+                )}
               </Link>
             );
           })}

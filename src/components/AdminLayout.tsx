@@ -1,5 +1,8 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabaseClient';
+import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -11,6 +14,8 @@ const adminNavItems = [
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Pharmacies', icon: Store, path: '/admin/pharmacies' },
   { label: 'Staff', icon: UserCog, path: '/admin/staff' },
+  { label: 'Delete Requests', icon: ShieldAlert, path: '/admin/delete-requests', badgeKey: 'deleteRequests' },
+  { label: 'System Trash', icon: Trash2, path: '/admin/trash' },
   { label: 'Audit Log', icon: ScrollText, path: '/admin/audit-log' },
   { label: 'Settings', icon: Settings, path: '/admin/profile' },
 ];
@@ -19,6 +24,19 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { pharmacy, logout } = useAuth();
+  
+  const { data: pendingCount = 0 } = useQuery({
+    queryKey: ['admin', 'pending-delete-count'],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('delete_requests')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'PENDING');
+      if (error) return 0;
+      return count || 0;
+    },
+    refetchInterval: 30000, // Poll every 30s as fallback to realtime
+  });
 
   const handleLogout = () => {
     logout();
@@ -64,7 +82,12 @@ export function AdminLayout() {
                 )}
               >
                 <item.icon className="w-4 h-4" />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {item.label === 'Delete Requests' && pendingCount > 0 && (
+                  <Badge className="ml-auto bg-orange-500 text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
+                    {pendingCount}
+                  </Badge>
+                )}
               </Link>
             );
           })}

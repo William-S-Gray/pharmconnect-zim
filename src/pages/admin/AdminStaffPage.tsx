@@ -15,7 +15,8 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
-import { UserRole } from '@/context/AuthContext';
+import { requestDeletion } from '@/lib/lifecycleUtils';
+import { useAuth, UserRole } from '@/context/AuthContext';
 
 type StaffMember = {
   id: string;
@@ -45,6 +46,7 @@ const emptyForm: StaffFormData = {
 
 const AdminStaffPage = () => {
   const queryClient = useQueryClient();
+  const { pharmacy } = useAuth();
   const [search, setSearch] = useState('');
   
   const [showCreate, setShowCreate] = useState(false);
@@ -127,18 +129,16 @@ const AdminStaffPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-       // Only remove membership so they lose access. Real user deletion needs admin API.
-       const { error } = await supabase.from('memberships').delete().eq('user_id', id);
-       if (error) throw error;
-       // Also optionally reset global_role
-       await supabase.from('profiles').update({ global_role: 'pharmacy_staff' }).eq('id', id);
+       // Now using Lifecycle Management: Normal users request, Admins approve.
+       // Even for Super Admin, we move to Trash instead of Hard Delete.
+       await requestDeletion('profiles', id, 'Administrative revocation of access', pharmacy?.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'staff'] });
-      toast.success('User access revoked from pharmacy successfully');
+      toast.success('Deletion request submitted to system queue.');
       setDeleteUser(null);
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to revoke access'),
+    onError: (error: any) => toast.error(error.message || 'Failed to submit request'),
   });
 
   const resetPasswordMutation = useMutation({

@@ -14,6 +14,7 @@ import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
+import { requestDeletion } from '@/lib/lifecycleUtils';
 import { useAuth, UserRole } from '@/context/AuthContext';
 
 type StaffMember = {
@@ -104,15 +105,14 @@ const PharmacyStaffPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-       const { error } = await supabase.from('memberships').delete().match({ user_id: id, pharmacy_id: pharmacy?.id });
-       if (error) throw error;
+       await requestDeletion('profiles', id, 'Staff tenure ended / Manual removal', pharmacy?.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['pharmacy', 'staff'] });
-      toast.success('Staff access revoked successfully');
+      toast.success('Deletion request submitted to admin for approval.');
       setDeleteUser(null);
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to revoke access'),
+    onError: (error: any) => toast.error(error.message || 'Failed to submit request'),
   });
 
   const resetPasswordMutation = useMutation({
