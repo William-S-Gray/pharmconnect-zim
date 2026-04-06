@@ -54,8 +54,14 @@ const LoginPage = () => {
     } else if (pharmacy) {
       navigate('/dashboard');
     } else if (user && !pharmacy && !isSuperAdmin) {
+      // Small delay to allow AuthContext to potentially fetch role
+      const timer = setTimeout(() => {
+        setIsLoading(false);
+        toast.error('No associated pharmacy or admin role found for this user.');
+      }, 1000);
+      return () => clearTimeout(timer);
+    } else if (!user) {
       setIsLoading(false);
-      toast.error('No associated pharmacy or admin role found for this user.');
     }
   }, [pharmacy, isSuperAdmin, user, navigate]);
 

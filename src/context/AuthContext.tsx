@@ -146,7 +146,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
         if (mData) {
           finalPharmacy = mData.pharmacies as unknown as Pharmacy;
-          finalRole = mData.role as UserRole;
+          // Priority: membership role -> profile global_role
+          finalRole = (mData.role as UserRole) || (profileData?.global_role as UserRole);
         } else if (profileData) {
           finalRole = profileData.global_role as UserRole;
         }

@@ -66,13 +66,15 @@ export const createStaffUser = async (
     throw new Error('User was created but pharmacy assignment failed: ' + membershipError.message);
   }
 
-  // Wait briefly for the DB trigger to insert the profile row, then patch it
-  await new Promise(resolve => setTimeout(resolve, 600));
-
+  // Upsert profile row to ensure it exists and has the correct role/name
   await supabase
     .from('profiles')
-    .update({ global_role: role, full_name: fullName })
-    .eq('id', newUserId);
+    .upsert({ 
+      id: newUserId, 
+      email: email, 
+      global_role: role, 
+      full_name: fullName 
+    }, { onConflict: 'id' });
 
   return newUserId;
 };
