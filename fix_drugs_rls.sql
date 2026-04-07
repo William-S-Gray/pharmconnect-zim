@@ -30,7 +30,7 @@ DROP POLICY IF EXISTS "Super admins can manage pharmacies" ON public.pharmacies;
 CREATE POLICY "Super admins can manage pharmacies" ON public.pharmacies
 FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
-DROP POLICY IF EXISTS "Super admins can manage profiles" ON public.profiles;
+DROP POLICY IF EXISTS "Super admins can manage medical profiles" ON public.profiles;
 CREATE POLICY "Super admins can manage medical profiles" ON public.profiles
 FOR ALL USING (public.is_super_admin()) WITH CHECK (public.is_super_admin());
 
