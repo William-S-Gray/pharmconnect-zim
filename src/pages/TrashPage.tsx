@@ -110,8 +110,13 @@ const TrashPage = () => {
 
   const hardDeleteMutation = useMutation({
     mutationFn: async (item: TrashedItem) => {
-      const { error } = await supabase.from(item.table).delete().eq('id', item.id);
-      if (error) throw error;
+      if (item.table === 'profiles') {
+        const { error } = await supabase.rpc('admin_delete_user', { target_user_id: item.id });
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from(item.table).delete().eq('id', item.id);
+        if (error) throw error;
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system', 'trash'] });

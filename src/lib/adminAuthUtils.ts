@@ -39,6 +39,21 @@ export const createStaffUser = async (
 ) => {
   const bgClient = createEphemeralClient();
 
+  // 1. Pre-check: Does a profile already exist with this email?
+  const { data: existingProfile } = await supabase
+    .from('profiles')
+    .select('id, lifecycle_status, email')
+    .ilike('email', email)
+    .maybeSingle();
+
+  if (existingProfile) {
+    if (existingProfile.lifecycle_status === 'TRASHED') {
+      throw new Error(`A user with the email ${email} is currently in the System Trash. Please restore or permanently purge them from the Trash page before recreating.`);
+    }
+    throw new Error(`An active user with the email ${email} already exists.`);
+  }
+
+  // 2. Create the user in Auth
   const { data: signUpData, error: signUpError } = await bgClient.auth.signUp({
     email,
     password,
