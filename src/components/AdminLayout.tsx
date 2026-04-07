@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ConnectivityBanner } from './ConnectivityBanner';
+import { MobileNav } from './MobileNav';
 
 const adminNavItems = [
   { label: 'Overview', icon: LayoutDashboard, path: '/admin' },
@@ -61,6 +62,17 @@ export function AdminLayout() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <ConnectivityBanner />
+      <MobileNav 
+        items={adminNavItems}
+        pharmacyName={pharmacy?.name || 'Admin'}
+        role="ADMIN"
+        badgeCounts={{ 
+          deleteRequests: pendingCount,
+          conflicts: conflictsCount
+        }}
+        onLogout={handleLogout}
+        adminContext
+      />
       <div className="flex-1 flex">
         <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
         <div className="p-4 border-b border-border">
@@ -126,9 +138,9 @@ export function AdminLayout() {
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border mobile-nav-skeu">
-        {adminNavItems.slice(0, 5).map((item) => {
+      {/* Mobile bottom nav - simplified to top 4 items */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border bg-background/80 backdrop-blur-md">
+        {adminNavItems.slice(0, 4).map((item) => {
           const isActive = item.path === '/admin'
             ? location.pathname === '/admin'
             : location.pathname.startsWith(item.path);
@@ -137,12 +149,12 @@ export function AdminLayout() {
               key={item.path}
               to={item.path}
               className={cn(
-                'flex flex-col items-center gap-0.5 text-[10px] p-1.5 rounded-lg transition-all',
+                'flex flex-col items-center gap-0.5 text-[10px] p-2 rounded-xl transition-all duration-200',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
               <item.icon className="w-5 h-5" />
-              {item.label.split(' ')[0]}
+              <span className="font-medium">{item.label.split(' ')[0]}</span>
             </Link>
           );
         })}

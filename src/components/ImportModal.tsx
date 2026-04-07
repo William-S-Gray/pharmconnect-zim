@@ -4,6 +4,8 @@ import { Upload, FileSpreadsheet, AlertCircle, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 interface ImportRow {
@@ -18,7 +20,7 @@ interface ImportRow {
 interface ImportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConfirm: (rows: ImportRow[]) => void;
+  onConfirm: (rows: ImportRow[], setProgress: (p: number) => void) => Promise<void>;
 }
 
 function fuzzyMatchDrug(name: string, masterDrugs: any[]): { matched: boolean; drugId?: string } {
@@ -56,6 +58,8 @@ function parseFileData(data: string[][], masterDrugs: any[]): ImportRow[] {
 export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps) {
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [fileName, setFileName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -94,11 +98,20 @@ export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps)
     if (file) handleFile(file);
   };
 
-  const handleConfirm = () => {
-    onConfirm(rows.filter(r => r.matched));
-    onOpenChange(false);
-    setRows([]);
-    setFileName('');
+  const handleConfirm = async () => {
+    setIsImporting(true);
+    setProgress(0);
+    try {
+      await onConfirm(rows.filter(r => r.matched), (p) => setProgress(p));
+      onOpenChange(false);
+      setRows([]);
+      setFileName('');
+    } catch (error: any) {
+      toast.error(error.message || "Import failed");
+    } finally {
+      setIsImporting(false);
+      setProgress(0);
+    }
   };
 
   const matchedCount = rows.filter(r => r.matched).length;
@@ -174,7 +187,7 @@ export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps)
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((row, i) => (
+                  {rows.slice(0, 100).map((row, i) => (
                     <tr key={i} className={`border-b border-border last:border-0 ${!row.matched ? 'bg-destructive/5' : ''}`} style={row.matched ? { background: 'hsl(0 0% 99%)' } : {}}>
                       <td className="p-2 font-medium">{row.drug_name}</td>
                       <td className="p-2 text-right font-mono-drug">{row.quantity}</td>
@@ -187,16 +200,33 @@ export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps)
                       </td>
                     </tr>
                   ))}
+                  {rows.length > 100 && (
+                    <tr>
+                      <td colSpan={4} className="p-4 text-center text-muted-foreground italic">
+                        ... and {rows.length - 100} more rows
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
 
+            {isImporting && (
+              <div className="mt-6 space-y-2">
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="text-muted-foreground">Importing data...</span>
+                  <span className="text-primary">{Math.round(progress)}%</span>
+                </div>
+                <Progress value={progress} className="h-2" />
+              </div>
+            )}
+
             <div className="flex gap-3 mt-4">
-              <Button variant="outline" onClick={() => { setRows([]); setFileName(''); }}>
+              <Button variant="outline" onClick={() => { setRows([]); setFileName(''); }} disabled={isImporting}>
                 Choose Different File
               </Button>
-              <Button onClick={handleConfirm} disabled={matchedCount === 0}>
-                Import {matchedCount} Drug{matchedCount !== 1 ? 's' : ''}
+              <Button onClick={handleConfirm} disabled={matchedCount === 0 || isImporting}>
+                {isImporting ? 'Importing...' : `Import ${matchedCount} Drug${matchedCount !== 1 ? 's' : ''}`}
               </Button>
             </div>
           </>

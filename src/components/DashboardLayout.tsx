@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { PersistentAlertList } from '@/components/PersistentAlertList';
 import { ConnectivityBanner } from './ConnectivityBanner';
+import { MobileNav } from './MobileNav';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -70,6 +71,16 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <ConnectivityBanner />
+      <MobileNav 
+        items={navItems}
+        pharmacyName={pharmacy?.name}
+        role={role || 'USER'}
+        badgeCounts={{ 
+          deleteRequests: pendingCount,
+          conflicts: conflictsCount
+        }}
+        onLogout={handleLogout}
+      />
       {/* Sidebar Wrapper */}
       <div className="flex-1 flex">
         {/* Sidebar */}
@@ -137,8 +148,8 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border mobile-nav-skeu">
+      {/* Mobile bottom nav - simplified to top 4 items */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 flex justify-around py-2 px-1 border-t border-border bg-background/80 backdrop-blur-md">
         {navItems.filter(item => !item.adminOnly || role === 'pharmacy_admin').slice(0, 4).map((item) => {
           const isActive = location.pathname === item.path;
           return (
@@ -146,12 +157,12 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
               key={item.path}
               to={item.path}
               className={cn(
-                'flex flex-col items-center gap-0.5 text-[10px] p-1.5 rounded-lg transition-all',
+                'flex flex-col items-center gap-0.5 text-[10px] p-2 rounded-xl transition-all duration-200',
                 isActive ? 'text-primary' : 'text-muted-foreground'
               )}
             >
               <item.icon className="w-5 h-5" />
-              {item.label.split(' ')[0]}
+              <span className="font-medium">{item.label.split(' ')[0]}</span>
             </Link>
           );
         })}

@@ -9,7 +9,8 @@ import { ImportModal } from '@/components/ImportModal';
 import { exportToCSV, exportToExcel } from '@/lib/exportUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { toast } from 'sonner';
-import { usePagination } from '@/hooks/use-pagination';
+import { useServerPagination } from '@/hooks/use-server-pagination';
+import { useDebounce } from '@/hooks/use-debounce';
 import { PaginationControls } from '@/components/PaginationControls';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import {
@@ -48,12 +49,15 @@ const StockManagementPage = () => {
   const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const { data: items = [], isLoading } = useQuery({
-    queryKey: ['stock', pharmacy?.id],
+  const { page, pageSize, setPage, setPageSize, nextPage, prevPage, pageSizeOptions } = useServerPagination({ defaultPageSize: 20 });
+  const debouncedSearch = useDebounce(search, 300);
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['stock', pharmacy?.id, debouncedSearch, filter, page, pageSize],
     queryFn: async () => {
-      if (!pharmacy?.id) return [];
+      if (!pharmacy?.id) return { items: [], totalCount: 0 };
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('pharmacy_stock')
         .select(`
           id,
@@ -63,19 +67,40 @@ const StockManagementPage = () => {
           threshold,
           expiry_date,
           is_available,
-          drugs (
+          drugs!inner (
             generic_name,
             common_name,
             strength,
             form
           )
-        `)
-        .eq('pharmacy_id', pharmacy.id)
-        .gte('updated_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+        `, { count: 'exact' })
+        .eq('pharmacy_id', pharmacy.id);
+
+      // Status filters
+      if (filter === 'OUT_OF_STOCK') {
+        query = query.or('quantity.eq.0,is_available.eq.false');
+      } else if (filter === 'LOW_STOCK') {
+        query = query.filter('quantity', 'lte', 'threshold').eq('is_available', true).gt('quantity', 0);
+      } else if (filter === 'IN_STOCK') {
+        query = query.gt('quantity', 'threshold').eq('is_available', true);
+      }
+
+      // Search (Generic or Common Name)
+      if (debouncedSearch) {
+        query = query.or(`generic_name.ilike.%${debouncedSearch}%,common_name.ilike.%${debouncedSearch}%`, { foreignTable: 'drugs' });
+      }
+
+      // Pagination
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+      
+      const { data: stockData, error, count } = await query
+        .range(from, to)
+        .order('id', { ascending: false });
         
       if (error) throw error;
       
-      return (data || []).map((s: any) => {
+      const items = (stockData || []).map((s: any) => {
         const drug = s.drugs;
         const qty = s.quantity || 0;
         const thresh = s.threshold || 0;
@@ -100,18 +125,15 @@ const StockManagementPage = () => {
           stock_status,
         };
       });
+
+      return { items, totalCount: count || 0 };
     },
     enabled: !!pharmacy?.id && isSupabaseConfigured,
   });
 
-  const filtered = items.filter(item => {
-    const matchesSearch = item.drugName.toLowerCase().includes(search.toLowerCase()) ||
-      item.strength.toLowerCase().includes(search.toLowerCase());
-    const matchesFilter = filter === 'ALL' || item.stock_status === filter;
-    return matchesSearch && matchesFilter;
-  });
-
-  const pagination = usePagination<StockItem>(filtered, { defaultPageSize: 20 });
+  const stockItems = data?.items || [];
+  const totalItems = data?.totalCount || 0;
+  const totalPages = Math.ceil(totalItems / pageSize);
 
   const addMutation = useMutation({
     mutationFn: async (payload: any) => {
@@ -257,11 +279,16 @@ const StockManagementPage = () => {
     setDeleteId(null);
   };
 
-  const handleImport = async (rows: any[]) => {
-    try {
-      const formatted = rows.map(r => ({
+  const handleImport = async (rows: any[], setProgress: (p: number) => void) => {
+    const CHUNK_SIZE = 1000;
+    const total = rows.length;
+    let processed = 0;
+
+    for (let i = 0; i < total; i += CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + CHUNK_SIZE);
+      const formatted = chunk.map(r => ({
         pharmacy_id: pharmacy?.id,
-        drug_id: r.drug_id,
+        drug_id: r.matchedDrugId, // Use the correct ID from matching
         quantity: r.quantity,
         unit_price: r.unit_price,
         threshold: r.threshold || 10,
@@ -269,27 +296,31 @@ const StockManagementPage = () => {
         is_available: true
       }));
 
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('pharmacy_stock')
         .upsert(formatted, { onConflict: 'pharmacy_id,drug_id' });
 
-      if (error) throw error;
-      
-      queryClient.invalidateQueries({ queryKey: ['stock'] });
-      toast.success(`${rows.length} drug(s) processed`);
-    } catch (error: any) {
-      toast.error(error.message || 'Import failed');
+      if (error) {
+        console.error('Import chunk error:', error);
+        throw new Error(`Failed at row ${i + 1}: ${error.message}`);
+      }
+
+      processed += chunk.length;
+      setProgress((processed / total) * 100);
     }
+    
+    queryClient.invalidateQueries({ queryKey: ['stock'] });
+    toast.success(`Successfully imported ${total} drugs`);
   };
 
   const handleExportCSV = () => {
-    exportToCSV(filtered, 'pharmtrack-stock');
-    toast.success('Exported as CSV');
+    exportToCSV(stockItems, 'pharmtrack-stock');
+    toast.success('Exported current page as CSV');
   };
 
   const handleExportExcel = () => {
-    exportToExcel(filtered, 'pharmtrack-stock');
-    toast.success('Exported as Excel');
+    exportToExcel(stockItems, 'pharmtrack-stock');
+    toast.success('Exported current page as Excel');
   };
 
   const openEdit = (item: StockItem) => {
@@ -332,7 +363,10 @@ const StockManagementPage = () => {
               key={f}
               size="sm"
               variant={filter === f ? 'default' : 'outline'}
-              onClick={() => setFilter(f)}
+              onClick={() => {
+                setFilter(f);
+                setPage(1);
+              }}
               className="text-xs"
             >
               {f === 'ALL' ? 'All' : f === 'IN_STOCK' ? 'In Stock' : f === 'LOW_STOCK' ? 'Low' : 'Out'}
@@ -360,7 +394,7 @@ const StockManagementPage = () => {
                 </tr>
               </thead>
               <tbody>
-                {pagination.paginatedItems.map(item => (
+                {stockItems.map(item => (
                   <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors table-row-skeu">
                     <td className="p-3">
                       <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
@@ -381,8 +415,8 @@ const StockManagementPage = () => {
                     </td>
                   </tr>
                 ))}
-                {filtered.length === 0 && (
-                  <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No drugs match your search</td></tr>
+                {stockItems.length === 0 && (
+                  <tr><td colSpan={5} className="p-8 text-center text-muted-foreground">No drugs found matching your search</td></tr>
                 )}
               </tbody>
             </table>
@@ -390,7 +424,7 @@ const StockManagementPage = () => {
 
           {/* Mobile cards */}
           <div className="md:hidden space-y-3">
-            {pagination.paginatedItems.map(item => (
+            {stockItems.map(item => (
               <div key={item.id} className="card-pharma">
                 <div className="flex items-start justify-between">
                   <div>
@@ -416,14 +450,15 @@ const StockManagementPage = () => {
           </div>
 
           <PaginationControls
-            page={pagination.page} totalPages={pagination.totalPages}
-            canPrev={pagination.canPrev} canNext={pagination.canNext}
-            onPrev={pagination.prevPage} onNext={pagination.nextPage}
-            onPageChange={pagination.setPage}
-            startIndex={pagination.startIndex} endIndex={pagination.endIndex}
-            totalItems={pagination.totalItems}
-            pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
-            pageSizeOptions={[10, 20, 50]}
+            page={page} totalPages={totalPages}
+            canPrev={page > 1} canNext={page < totalPages}
+            onPrev={prevPage} onNext={nextPage}
+            onPageChange={setPage}
+            startIndex={(page - 1) * pageSize + 1} 
+            endIndex={Math.min(page * pageSize, totalItems)}
+            totalItems={totalItems}
+            pageSize={pageSize} onPageSizeChange={setPageSize}
+            pageSizeOptions={pageSizeOptions}
           />
         </>
       )}
@@ -448,7 +483,7 @@ const StockManagementPage = () => {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <span className="text-xs text-muted-foreground self-center">{filtered.length} drug{filtered.length !== 1 ? 's' : ''} shown</span>
+        <span className="text-xs text-muted-foreground self-center">{totalItems} drug{totalItems !== 1 ? 's' : ''} total</span>
       </div>
 
       <AddEditDrugSheet
