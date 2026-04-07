@@ -21,11 +21,25 @@ let clientInstance: any;
 if (supabaseUrl && supabaseAnonKey) {
   if (import.meta.env.DEV) {
     if (!window.__supabaseClient) {
-      window.__supabaseClient = createClient(supabaseUrl, supabaseAnonKey);
+      window.__supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+          flowType: 'pkce'
+        }
+      });
     }
     clientInstance = window.__supabaseClient;
   } else {
-    clientInstance = createClient(supabaseUrl, supabaseAnonKey);
+    clientInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: 'pkce'
+      }
+    });
   }
 } else {
   clientInstance = new Proxy({} as any, {
