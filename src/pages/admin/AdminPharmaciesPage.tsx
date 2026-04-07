@@ -35,7 +35,8 @@ interface PharmacyUser {
 
 type UserFormData = {
   name: string;
-  email: string;
+  email: string; // Pharmacy public email
+  admin_email: string; // Admin account email
   phone: string;
   city: string;
   suburb: string;
@@ -49,6 +50,7 @@ type UserFormData = {
 const emptyForm: UserFormData = {
   name: '',
   email: '',
+  admin_email: '',
   phone: '',
   city: 'Harare',
   suburb: '',
@@ -77,7 +79,7 @@ const AdminPharmaciesPage = () => {
   const [newPlan, setNewPlan] = useState('');
 
   const { data: users = [], isLoading } = useQuery<PharmacyUser[]>({
-    queryKey: ['admin', 'users', statusFilter, planFilter],
+    queryKey: ['admin', 'pharmacies', statusFilter, planFilter],
     queryFn: async () => {
       let query = supabase
         .from('pharmacies')
@@ -116,7 +118,7 @@ const AdminPharmaciesPage = () => {
       if (error) throw error;
     },
     onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
       toast.success(`Pharmacy ${vars.status === 'SUSPENDED' ? 'suspended' : 'reactivated'}`);
     },
     onError: (error: any) => toast.error(error.message || 'Failed to update status'),
@@ -131,7 +133,7 @@ const AdminPharmaciesPage = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
       toast.success(`Plan changed to ${newPlan}`);
       setChangePlanUser(null);
     },
@@ -140,8 +142,8 @@ const AdminPharmaciesPage = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: UserFormData) => {
-      if (!data.password || !data.admin_name) {
-         throw new Error("Admin Name and Password are required to create a new Pharmacy and Administrator.");
+      if (!data.name || !data.admin_email || !data.password || !data.admin_name || !data.city || !data.suburb || !data.phone) {
+         throw new Error("Pharmacy Name, Admin Email, Admin Name, Password, City, Suburb, and Phone are all required.");
       }
 
       // Create Pharmacy
@@ -149,7 +151,7 @@ const AdminPharmaciesPage = () => {
         .from('pharmacies')
         .insert({
            name: data.name,
-           email: data.email,
+           email: data.email || null, // Optional pharmacy email
            phone: data.phone,
            city: data.city,
            suburb: data.suburb,
@@ -163,10 +165,10 @@ const AdminPharmaciesPage = () => {
       if (pharmacyError) throw pharmacyError;
 
       // Create Staff Admin User mapped to this pharmacy
-      await createStaffUser(data.email, data.password, data.admin_name, 'pharmacy_admin', newPharmacy.id);
+      await createStaffUser(data.admin_email, data.password, data.admin_name, 'pharmacy_admin', newPharmacy.id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
       toast.success('Pharmacy and Admin User created successfully');
       setShowCreate(false);
       setFormData(emptyForm);
@@ -192,7 +194,7 @@ const AdminPharmaciesPage = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
       toast.success('User updated successfully');
       setEditUser(null);
     },
@@ -201,11 +203,17 @@ const AdminPharmaciesPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-       await requestDeletion('pharmacies', id, 'Administrative closure / permanent removal');
+       // Direct move to trash for Super Admins
+       const { error } = await supabase
+         .from('pharmacies')
+         .update({ lifecycle_status: 'TRASHED', trashed_at: new Date().toISOString() })
+         .eq('id', id);
+       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
-      toast.success('Pharmacy moved to system trash queue.');
+      queryClient.invalidateQueries({ queryKey: ['system', 'trash'] });
+      toast.success('Pharmacy moved to system trash (48h retention).');
       setDeleteUser(null);
     },
     onError: (error: any) => toast.error(error.message || 'Failed to trash pharmacy'),
@@ -242,27 +250,27 @@ const AdminPharmaciesPage = () => {
   };
 
   const renderFormFields = (isCreate: boolean) => (
-    <div className="space-y-4">
+    <div className="space-y-4 overflow-y-auto max-h-[60vh] px-2 py-1">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Pharmacy Name</Label>
+          <Label>Pharmacy Name *</Label>
           <Input value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. HealthPlus Pharmacy" />
         </div>
         <div className="space-y-2">
-          <Label>Email</Label>
+          <Label>Pharmacy Public Email (Optional)</Label>
           <Input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="pharmacy@example.com" />
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>City / Town</Label>
+          <Label>City / Town *</Label>
           <Input list="city-list" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} placeholder="e.g. Harare" />
           <datalist id="city-list">
             {cities.map(c => <option key={c} value={c} />)}
           </datalist>
         </div>
         <div className="space-y-2">
-          <Label>Suburb</Label>
+          <Label>Suburb *</Label>
           <Input value={formData.suburb} onChange={(e) => setFormData({ ...formData, suburb: e.target.value })} placeholder="e.g. Avondale" />
         </div>
       </div>
@@ -296,7 +304,7 @@ const AdminPharmaciesPage = () => {
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label>Phone</Label>
+          <Label>Phone *</Label>
           <Input value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} placeholder="0771 234 567" />
         </div>
       </div>
@@ -305,15 +313,19 @@ const AdminPharmaciesPage = () => {
           <h4 className="font-medium text-sm mb-3">Admin Account Details</h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Admin Name</Label>
+              <Label>Admin Name *</Label>
               <Input value={formData.admin_name || ''} onChange={(e) => setFormData({ ...formData, admin_name: e.target.value })} placeholder="John Doe" />
             </div>
             <div className="space-y-2">
-              <Label>Admin Password</Label>
-              <Input type="password" value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder="Min 6 characters" />
+              <Label>Admin Email *</Label>
+              <Input type="email" value={formData.admin_email || ''} onChange={(e) => setFormData({ ...formData, admin_email: e.target.value })} placeholder="admin@example.com" />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">This will create the primary administrative login for this pharmacy using the email provided above.</p>
+          <div className="mt-4">
+            <Label>Admin Password *</Label>
+            <Input type="password" value={formData.password || ''} onChange={(e) => setFormData({ ...formData, password: e.target.value })} placeholder="Min 6 characters" />
+          </div>
+          <p className="text-xs text-muted-foreground mt-2">This will create the primary administrative login for this pharmacy.</p>
         </div>
       )}
     </div>
@@ -479,8 +491,8 @@ const AdminPharmaciesPage = () => {
           {renderFormFields(true)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button disabled={createMutation.isPending || !formData.name || !formData.email} onClick={() => createMutation.mutate(formData)}>
-              {createMutation.isPending ? 'Creating...' : 'Create User'}
+            <Button disabled={createMutation.isPending || !formData.name || !formData.admin_email || !formData.admin_name || !formData.password} onClick={() => createMutation.mutate(formData)}>
+              {createMutation.isPending ? 'Creating...' : 'Create Pharmacy'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -496,7 +508,7 @@ const AdminPharmaciesPage = () => {
           {renderFormFields(false)}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
-            <Button disabled={updateMutation.isPending || !formData.name || !formData.email} onClick={() => editUser && updateMutation.mutate({ id: editUser.id, data: formData })}>
+            <Button disabled={updateMutation.isPending || !formData.name} onClick={() => editUser && updateMutation.mutate({ id: editUser.id, data: formData })}>
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </Button>
           </DialogFooter>

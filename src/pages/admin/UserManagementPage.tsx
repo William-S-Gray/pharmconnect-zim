@@ -67,11 +67,20 @@ const UserManagementPage = () => {
       let query = supabase
         .from('profiles')
         .select(`
-          id, email, full_name, global_role, lifecycle_status, created_at,
-          memberships (role, pharmacy_id, pharmacies (name))
+          id, 
+          email, 
+          full_name, 
+          global_role, 
+          lifecycle_status, 
+          created_at,
+          memberships (
+            role, 
+            pharmacy_id, 
+            pharmacies (name)
+          )
         `);
 
-      if (myRole === 'admin' && pharmacy?.id) {
+      if (myRole === 'pharmacy_admin' && pharmacy?.id) {
         // Scoped to pharmacy members
         const { data: members } = await supabase.from('memberships').select('user_id').eq('pharmacy_id', pharmacy.id);
         const ids = members?.map(m => m.user_id) || [];
@@ -110,8 +119,9 @@ const UserManagementPage = () => {
 
   const createMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const pId = myRole === 'admin' ? pharmacy?.id : data.pharmacy_id;
-      if (!pId) throw new Error('Pharmacy selection required');
+      let pId = myRole === 'pharmacy_admin' ? pharmacy?.id : data.pharmacy_id;
+      if (data.role !== 'super_admin' && !pId) throw new Error('Pharmacy selection required');
+      if (data.role === 'super_admin') pId = undefined; // Super admins don't need a pharmacy
       return createStaffUser(data.email, data.password, data.full_name, data.role, pId);
     },
     onSuccess: () => {
@@ -147,11 +157,21 @@ const UserManagementPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (user: ManagedUser) => {
-      return requestDeletion('profiles', user.id, 'Administrative removal', user.pharmacy_id);
+      if (myRole === 'super_admin') {
+         // Direct move to trash for Super Admins
+         const { error } = await supabase
+           .from('profiles')
+           .update({ lifecycle_status: 'TRASHED', trashed_at: new Date().toISOString() })
+           .eq('id', user.id);
+         if (error) throw error;
+      } else {
+         return requestDeletion('profiles', user.id, 'Administrative removal', user.pharmacy_id);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
-      toast.success('Deletion request submitted to trash');
+      queryClient.invalidateQueries({ queryKey: ['system', 'trash'] });
+      toast.success('Record moved to system trash (48h retention)');
       setDeleteUser(null);
     }
   });
@@ -205,7 +225,7 @@ const UserManagementPage = () => {
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
             <SelectItem value="super_admin">Super Admin</SelectItem>
-            <SelectItem value="admin">Pharmacy Admin</SelectItem>
+            <SelectItem value="pharmacy_admin">Pharmacy Admin</SelectItem>
             <SelectItem value="pharmacy_staff">Pharmacy Staff</SelectItem>
           </SelectContent>
         </Select>
@@ -249,10 +269,10 @@ const UserManagementPage = () => {
                   </td>
                   <td className="p-4 text-center">
                     <Badge variant={u.global_role === 'super_admin' ? 'default' : 'secondary'} className="capitalize">
-                      {u.global_role.replace('_', ' ')}
+                      {u.global_role?.replace('_', ' ') || 'N/A'}
                     </Badge>
                   </td>
-                  <td className="p-4 capitalize">{u.membership_role.replace('_', ' ')}</td>
+                  <td className="p-4 capitalize">{u.membership_role?.replace('_', ' ') || 'N/A'}</td>
                   <td className="p-4 text-muted-foreground">{u.pharmacy_name}</td>
                   <td className="p-4">
                     <Badge 
@@ -267,7 +287,7 @@ const UserManagementPage = () => {
                       <Button variant="ghost" size="icon" onClick={() => setEditUser(u)}>
                         <Edit className="w-4 h-4 text-primary" />
                       </Button>
-                      {(u.global_role === 'admin' || u.membership_role === 'admin') && (
+                      {(u.global_role === 'pharmacy_admin' || u.membership_role === 'pharmacy_admin') && (
                         <Button variant="ghost" size="icon" title="Demote to Staff" onClick={() => setDemoteUser(u)}>
                           <ArrowDownCircle className="w-4 h-4 text-amber-600" />
                         </Button>
@@ -310,7 +330,7 @@ const UserManagementPage = () => {
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="space-y-1">
                   <span className="text-muted-foreground">Global Role</span>
-                  <div className="font-medium capitalize">{u.global_role.replace('_', ' ')}</div>
+                  <div className="font-medium capitalize">{u.global_role?.replace('_', ' ') || 'N/A'}</div>
                 </div>
                 <div className="space-y-1">
                   <span className="text-muted-foreground">Pharmacy</span>
@@ -320,7 +340,7 @@ const UserManagementPage = () => {
 
               <div className="pt-2 border-t border-border flex items-center justify-between">
                 <div className="text-xs text-muted-foreground capitalize">
-                  {u.membership_role.replace('_', ' ')}
+                  {u.membership_role?.replace('_', ' ') || 'N/A'}
                 </div>
                 <div className="flex items-center gap-1">
                   <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setEditUser(u)}>
@@ -362,7 +382,7 @@ const UserManagementPage = () => {
             <DialogTitle className="text-emboss">Provision New User</DialogTitle>
             <DialogDescription>Create a new account and assign a role/pharmacy.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
+          <div className="space-y-4 py-4 overflow-y-auto max-h-[60vh] px-2">
             <div className="space-y-2">
               <Label>Full Name</Label>
               <Input value={formData.full_name} onChange={e => setFormData({...formData, full_name: e.target.value})} placeholder="John Doe" />
@@ -382,12 +402,12 @@ const UserManagementPage = () => {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="pharmacy_staff">Staff</SelectItem>
-                    <SelectItem value="admin">Pharmacy Admin</SelectItem>
+                    <SelectItem value="pharmacy_admin">Pharmacy Admin</SelectItem>
                     {myRole === 'super_admin' && <SelectItem value="super_admin">Super Admin</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
-              {myRole === 'super_admin' && (
+              {myRole === 'super_admin' && formData.role !== 'super_admin' && (
                 <div className="space-y-2">
                   <Label>Pharmacy</Label>
                   <Select value={formData.pharmacy_id} onValueChange={v => setFormData({...formData, pharmacy_id: v})}>
@@ -431,7 +451,7 @@ const UserManagementPage = () => {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pharmacy_staff">Staff</SelectItem>
-                  <SelectItem value="admin">Pharmacy Admin</SelectItem>
+                  <SelectItem value="pharmacy_admin">Pharmacy Admin</SelectItem>
                   {myRole === 'super_admin' && <SelectItem value="super_admin">Super Admin</SelectItem>}
                 </SelectContent>
               </Select>
@@ -442,7 +462,7 @@ const UserManagementPage = () => {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pharmacy_staff">Staff</SelectItem>
-                  <SelectItem value="admin">Pharmacy Admin</SelectItem>
+                  <SelectItem value="pharmacy_admin">Pharmacy Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>

@@ -108,6 +108,19 @@ const TrashPage = () => {
     }
   });
 
+  const hardDeleteMutation = useMutation({
+    mutationFn: async (item: TrashedItem) => {
+      const { error } = await supabase.from(item.table).delete().eq('id', item.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['system', 'trash'] });
+      toast.success('Record permanently purged from the database.');
+      setHardDeletingItem(null);
+    },
+    onError: (err: any) => toast.error(err.message || 'Hard delete failed')
+  });
+
   const getRemainingTime = (expiry: string) => {
     const diff = new Date(expiry).getTime() - new Date().getTime();
     if (diff <= 0) return 'Expired';
@@ -178,6 +191,11 @@ const TrashPage = () => {
                             <Button size="sm" variant="ghost" onClick={() => setRestoringItem(item)} className="h-8 gap-1.5 text-primary hover:bg-primary/10">
                               <RotateCcw className="w-3.5 h-3.5" /> Restore
                             </Button>
+                            {role === 'super_admin' && (
+                              <Button size="sm" variant="ghost" onClick={() => setHardDeletingItem(item)} className="h-8 gap-1.5 text-destructive hover:bg-destructive/10">
+                                <Trash2 className="w-3.5 h-3.5" /> Purge
+                              </Button>
+                            )}
                           </div>
                         </TableCell>
                       </TableRow>
@@ -280,7 +298,7 @@ const TrashPage = () => {
 
       {/* Restoration Confirmation Dialog */}
       <AlertDialog open={!!restoringItem} onOpenChange={() => setRestoringItem(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="dialog-skeu">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
               <RotateCcw className="w-5 h-5 text-primary" /> Restore Record?
@@ -297,6 +315,31 @@ const TrashPage = () => {
               disabled={restoreMutation.isPending}
             >
               {restoreMutation.isPending ? 'Validating...' : 'Restore Now'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Hard Delete Confirmation Dialog */}
+      <AlertDialog open={!!hardDeletingItem} onOpenChange={() => setHardDeletingItem(null)}>
+        <AlertDialogContent className="dialog-skeu border-destructive shadow-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" /> Permanent Purge?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-foreground/80">
+              You are about to permanently delete <strong>{hardDeletingItem?.name}</strong> from the database. 
+              This action bypassing the 48-hour buffer and is <span className="font-bold text-destructive">IRREVERSIBLE</span>.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => hardDeletingItem && hardDeleteMutation.mutate(hardDeletingItem)}
+              disabled={hardDeleteMutation.isPending}
+              className="bg-destructive hover:bg-destructive/90 text-white"
+            >
+              {hardDeleteMutation.isPending ? 'Purging...' : 'Yes, Permanently Delete'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -35,7 +35,7 @@ export const createStaffUser = async (
   password: string,
   fullName: string,
   role: UserRole,
-  pharmacyId: string
+  pharmacyId?: string
 ) => {
   const bgClient = createEphemeralClient();
 
@@ -55,15 +55,17 @@ export const createStaffUser = async (
 
   const newUserId = signUpData.user.id;
 
-  // Insert membership linking the new user to the pharmacy
-  const { error: membershipError } = await supabase.from('memberships').insert({
-    user_id: newUserId,
-    pharmacy_id: pharmacyId,
-    role: role,
-  });
+  // Insert membership linking the new user to the pharmacy (if provided)
+  if (pharmacyId) {
+    const { error: membershipError } = await supabase.from('memberships').insert({
+      user_id: newUserId,
+      pharmacy_id: pharmacyId,
+      role: role,
+    });
 
-  if (membershipError) {
-    throw new Error('User was created but pharmacy assignment failed: ' + membershipError.message);
+    if (membershipError) {
+      throw new Error('User was created but pharmacy assignment failed: ' + membershipError.message);
+    }
   }
 
   // Upsert profile row to ensure it exists and has the correct role/name
