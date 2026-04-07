@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -413,6 +414,7 @@ const UserManagementPage = () => {
         <DialogContent className="sm:max-w-md dialog-skeu">
           <DialogHeader>
             <DialogTitle className="text-emboss">Edit User Details</DialogTitle>
+            <DialogDescription>Update the user's name and system roles.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
