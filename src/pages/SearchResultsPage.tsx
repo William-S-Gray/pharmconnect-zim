@@ -3,10 +3,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { Navbar } from '@/components/Navbar';
 import { DrugSearchBar } from '@/components/DrugSearchBar';
 import { PharmacyResultCard } from '@/components/PharmacyResultCard';
-import { EmptyState } from '@/components/EmptyState';
+import { SmartEmptyState } from '@/components/SmartEmptyState';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { DrugInfoPanel } from '@/components/DrugInfoPanel';
-import { SearchX, Map as MapIcon, List, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
+import { Map as MapIcon, List, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
@@ -150,6 +150,10 @@ const SearchResultsPage = () => {
     setSearchParams({ drug: query, city: cityParam });
   };
 
+  const handleSmartSuggestion = (suggestion: string) => {
+    setSearchParams({ drug: suggestion, city: cityParam });
+  };
+
   const mapMarkers = useMemo(() => results.map(r => ({
     pharmacy_id: r.pharmacy_id,
     pharmacy_name: r.pharmacy_name,
@@ -271,32 +275,40 @@ const SearchResultsPage = () => {
                 <LoadingSpinner size="lg" label="Searching pharmacies..." />
               </div>
             ) : sorted.length === 0 ? (
-              <EmptyState
-                icon={SearchX}
-                title="No pharmacies found"
-                description={`No pharmacies found with "${drugQuery}" near ${cityParam}. Try a different spelling or check nearby cities.`}
+              <SmartEmptyState
+                query={drugQuery}
+                city={cityParam}
+                onSearchSuggestion={handleSmartSuggestion}
               />
             ) : (
               <div className={`${viewMode === 'map' ? 'hidden' : 'block'} space-y-3`}>
-                {pagination.paginatedItems.map((result) => (
-                  <PharmacyResultCard
-                    key={result.pharmacy_id}
-                    pharmacyId={result.pharmacy_id}
-                    drugId={result.drug_id}
-                    pharmacyName={result.pharmacy_name}
-                    suburb={result.suburb}
-                    city={result.city}
-                    lat={result.lat}
-                    lng={result.lng}
-                    distanceKm={result.distance_km}
-                    stockStatus={result.stock_status}
-                    quantity={result.quantity}
-                    unitPrice={result.unit_price}
-                    phone={result.phone}
-                    drugName={drugQuery}
-                    isOpenNow={true}
-                  />
-                ))}
+                {pagination.paginatedItems.map((result) => {
+                  const cheapestPrice = Math.min(
+                    ...sorted
+                      .filter(r => r.unit_price != null && r.stock_status !== 'OUT_OF_STOCK')
+                      .map(r => r.unit_price!)
+                  );
+                  return (
+                    <PharmacyResultCard
+                      key={result.pharmacy_id}
+                      pharmacyId={result.pharmacy_id}
+                      drugId={result.drug_id}
+                      pharmacyName={result.pharmacy_name}
+                      suburb={result.suburb}
+                      city={result.city}
+                      lat={result.lat}
+                      lng={result.lng}
+                      distanceKm={result.distance_km}
+                      stockStatus={result.stock_status}
+                      quantity={result.quantity}
+                      unitPrice={result.unit_price}
+                      phone={result.phone}
+                      drugName={drugQuery}
+                      isOpenNow={true}
+                      isCheapest={result.unit_price === cheapestPrice && cheapestPrice !== Infinity}
+                    />
+                  );
+                })}
                 <PaginationControls
                   page={pagination.page} totalPages={pagination.totalPages}
                   canPrev={pagination.canPrev} canNext={pagination.canNext}

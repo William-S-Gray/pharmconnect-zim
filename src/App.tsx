@@ -13,6 +13,7 @@ import { DashboardLayout } from "./components/DashboardLayout";
 import { AdminLayout } from "./components/AdminLayout";
 
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
+const DrugDiscoveryPage = lazy(() => import("./pages/DrugDiscoveryPage"));
 const PharmacyRegisterPage = lazy(() => import("./pages/PharmacyRegisterPage"));
 const LoginPage = lazy(() => import("./pages/LoginPage"));
 const PharmacyDashboard = lazy(() => import("./pages/PharmacyDashboard"));
@@ -28,6 +29,7 @@ const PharmacyStaffPage = lazy(() => import("./pages/PharmacyStaffPage"));
 const PharmacyDeleteRequestsPage = lazy(() => import("./pages/PharmacyDeleteRequestsPage"));
 const TrashPage = lazy(() => import("./pages/TrashPage"));
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage"));
+const ReservationsPage = lazy(() => import("./pages/ReservationsPage"));
 
 // Admin pages
 const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
@@ -70,6 +72,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/search" element={<SearchResultsPage />} />
+            <Route path="/discover" element={<DrugDiscoveryPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/pharmacy/reset-password" element={<ResetPasswordPage />} />
@@ -92,6 +95,7 @@ const App = () => (
               <Route path="profile" element={<PharmacyProfilePage />} />
               <Route path="security" element={<SecurityAuditPage />} />
               <Route path="conflicts" element={<ConflictManagementPage />} />
+              <Route path="reservations" element={<ReservationsPage />} />
             </Route>
             <Route path="/admin" element={
               <AdminRoute>

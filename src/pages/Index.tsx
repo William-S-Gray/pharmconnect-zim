@@ -35,7 +35,7 @@ const Index = () => {
             Find Your Medicine.<br />Right Now.
           </h1>
           <p className="text-white/80 text-base md:text-lg mb-8 max-w-xl mx-auto" style={{ textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
-            Search 300+ pharmacies in Harare & Mutare — see who has it in stock.
+            Search 300+ pharmacies in Zimbabwe — see who has it in stock.
           </p>
 
           <DrugSearchBar variant="hero" />

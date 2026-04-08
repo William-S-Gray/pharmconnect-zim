@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle, ShoppingBag } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
@@ -11,9 +11,10 @@ import { ConnectivityBanner } from './ConnectivityBanner';
 import { MobileNav } from './MobileNav';
 
 const navItems = [
-  { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
-  { label: 'Requested Drugs', icon: MessageCircle, path: '/dashboard/requests' },
-  { label: 'Inventory', icon: Package, path: '/dashboard/stock' },
+  { label: 'Dashboard',      icon: LayoutDashboard, path: '/dashboard' },
+  { label: 'Reservations',   icon: ShoppingBag,     path: '/dashboard/reservations' },
+  { label: 'Requested Drugs',icon: MessageCircle,   path: '/dashboard/requests' },
+  { label: 'Inventory',      icon: Package,         path: '/dashboard/stock' },
   { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
   { label: 'User Management', icon: Users, path: '/dashboard/users', adminOnly: true },
   { label: 'Analytics', icon: BarChart3, path: '/dashboard/analytics', adminOnly: true },
@@ -61,6 +62,22 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
     },
     enabled: !!pharmacy?.id && role === 'pharmacy_admin',
     refetchInterval: 30000,
+  });
+
+  const { data: reservationsCount = 0 } = useQuery({
+    queryKey: ['pharmacy', 'reservations-count', pharmacy?.id],
+    queryFn: async () => {
+      if (!pharmacy?.id) return 0;
+      const { count, error } = await supabase
+        .from('drug_reservations')
+        .select('*', { count: 'exact', head: true })
+        .eq('pharmacy_id', pharmacy.id)
+        .eq('status', 'PENDING');
+      if (error) return 0;
+      return count || 0;
+    },
+    enabled: !!pharmacy?.id,
+    refetchInterval: 20000,
   });
 
   const handleLogout = () => {
@@ -130,6 +147,11 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
                 {item.label === 'Sync Conflicts' && conflictsCount > 0 && (
                   <Badge className="ml-auto bg-primary text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none">
                     {conflictsCount}
+                  </Badge>
+                )}
+                {item.label === 'Reservations' && reservationsCount > 0 && (
+                  <Badge className="ml-auto text-[10px] h-4 px-1.5 min-w-[18px] flex items-center justify-center border-none animate-pulse" style={{ background: 'hsl(0 72% 51%)' }}>
+                    {reservationsCount}
                   </Badge>
                 )}
               </Link>

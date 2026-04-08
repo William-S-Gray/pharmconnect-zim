@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
 import { useSearchStore } from '@/stores/searchStore';
 
-interface PharmacyMarker {
+export interface PharmacyMarker {
   pharmacy_id: string;
   pharmacy_name: string;
   lat: number;
@@ -20,6 +20,14 @@ interface PharmacyMapProps {
   markers: PharmacyMarker[];
   center?: { lat: number; lng: number };
   zoom?: number;
+  /** pharmacy_id of the currently selected pharmacy (syncs with list) */
+  selectedPharmacyId?: string | null;
+  /** Called when user clicks a marker */
+  onMarkerSelect?: (marker: PharmacyMarker) => void;
+  /** User location to show a blue dot */
+  userLocation?: { lat: number; lng: number } | null;
+  /** pharmacy_id of the cheapest pharmacy (shown with gold star) */
+  cheapestPharmacyId?: string | null;
 }
 
 const mapContainerStyle = {
@@ -33,7 +41,15 @@ const defaultCenter = {
   lng: 31.0522,
 };
 
-export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
+export function PharmacyMap({
+  markers,
+  center,
+  zoom = 12,
+  selectedPharmacyId,
+  onMarkerSelect,
+  userLocation,
+  cheapestPharmacyId,
+}: PharmacyMapProps) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '';
   
   const { isLoaded } = useJsApiLoader({
@@ -45,12 +61,29 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
   const [distanceInfo, setDistanceInfo] = useState<DistanceMatrixResult | null>(null);
   const { userLat, userLng } = useSearchStore();
 
+  // Sync external selection → open InfoWindow
+  useEffect(() => {
+    if (selectedPharmacyId) {
+      const found = markers.find(m => m.pharmacy_id === selectedPharmacyId);
+      if (found) {
+        setSelected(found);
+        setDistanceInfo(null);
+      }
+    } else {
+      setSelected(null);
+    }
+  }, [selectedPharmacyId, markers]);
+
+  const effectiveUserLat = userLocation?.lat ?? userLat;
+  const effectiveUserLng = userLocation?.lng ?? userLng;
+
   const handleSelect = async (marker: PharmacyMarker) => {
     setSelected(marker);
     setDistanceInfo(null);
-    if (userLat && userLng) {
+    onMarkerSelect?.(marker);
+    if (effectiveUserLat && effectiveUserLng) {
       const info = await getDrivingDistance(
-        { lat: userLat, lng: userLng },
+        { lat: effectiveUserLat, lng: effectiveUserLng },
         { lat: marker.lat, lng: marker.lng }
       );
       setDistanceInfo(info);
@@ -83,17 +116,36 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
         zoomControl: true,
       }}
     >
-      {markers.map((marker) => (
+      {/* User location dot */}
+      {userLocation && (
         <Marker
-          key={marker.pharmacy_id}
-          position={{ lat: marker.lat, lng: marker.lng }}
+          position={userLocation}
           icon={{
-            url: getMarkerIcon(marker.stock_status),
-            scaledSize: new window.google.maps.Size(30, 30),
+            url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
+            scaledSize: new window.google.maps.Size(28, 28),
           }}
-          onClick={() => handleSelect(marker)}
+          title="Your location"
         />
-      ))}
+      )}
+
+      {markers.map((marker) => {
+        const isCheapest = cheapestPharmacyId === marker.pharmacy_id;
+        const isSelected = selected?.pharmacy_id === marker.pharmacy_id;
+        return (
+          <Marker
+            key={marker.pharmacy_id}
+            position={{ lat: marker.lat, lng: marker.lng }}
+            icon={{
+              url: isCheapest
+                ? 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png'
+                : getMarkerIcon(marker.stock_status),
+              scaledSize: new window.google.maps.Size(isSelected ? 38 : 30, isSelected ? 38 : 30),
+            }}
+            zIndex={isSelected ? 999 : isCheapest ? 100 : 1}
+            onClick={() => handleSelect(marker)}
+          />
+        );
+      })}
 
       {selected && (
         <InfoWindow
@@ -164,7 +216,7 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
 
 function getMarkerIcon(status: StockStatus): string {
   if (status === 'IN_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/green-dot.png';
-  if (status === 'LOW_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png';
+  if (status === 'LOW_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/orange-dot.png';
   return 'https://maps.google.com/mapfiles/ms/icons/red-dot.png';
 }
 

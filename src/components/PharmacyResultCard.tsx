@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Phone, MapPin, Clock, MessageCircle, Send, Navigation } from 'lucide-react';
+import { Phone, MapPin, Clock, MessageCircle, Send, Navigation, ShoppingBag } from 'lucide-react';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Badge } from './ui/badge';
 import { supabase } from '@/lib/supabaseClient';
 import { toast } from 'sonner';
+import { ReserveDrugModal } from './ReserveDrugModal';
 
 interface PharmacyResultCardProps {
   pharmacyId: string;
@@ -24,6 +26,8 @@ interface PharmacyResultCardProps {
   isOpenNow: boolean;
   drugName?: string;
   onHover?: () => void;
+  /** Highlights this card as the cheapest option */
+  isCheapest?: boolean;
 }
 
 export function PharmacyResultCard({
@@ -42,8 +46,10 @@ export function PharmacyResultCard({
   isOpenNow,
   drugName = 'this medicine',
   onHover,
+  isCheapest = false,
 }: PharmacyResultCardProps) {
   const [requestOpen, setRequestOpen] = useState(false);
+  const [reserveOpen, setReserveOpen] = useState(false);
   const [senderName, setSenderName] = useState('');
   const [senderContact, setSenderContact] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -93,10 +99,24 @@ export function PharmacyResultCard({
       <div
         onMouseEnter={onHover}
         className="card-pharma-hover p-4"
+        style={isCheapest ? {
+          borderColor: 'hsl(45 90% 50%)',
+          boxShadow: '0 0 0 2px hsl(45 90% 50% / 0.25), var(--shadow-card)',
+        } : undefined}
       >
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
-            <h3 className="font-heading font-semibold text-foreground truncate text-emboss">{pharmacyName}</h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-heading font-semibold text-foreground truncate text-emboss">{pharmacyName}</h3>
+              {isCheapest && (
+                <Badge
+                  className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+                  style={{ background: 'hsl(45 95% 52%)', color: '#7a4f00', border: '1px solid hsl(45 80% 62%)' }}
+                >
+                  ⭐ Cheapest
+                </Badge>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground flex items-center gap-1 mt-0.5">
               <MapPin className="w-3 h-3 flex-shrink-0" />
               {suburb}, {city} · {distanceKm} km away
@@ -136,15 +156,32 @@ export function PharmacyResultCard({
         </div>
 
         <div className="mt-4 flex gap-2">
-          <Button 
-            className="w-full btn-skeu-primary h-9" 
-            onClick={() => setRequestOpen(true)}
+          <Button
+            className="flex-1 btn-skeu-primary h-9"
+            onClick={() => setReserveOpen(true)}
             disabled={stockStatus === 'OUT_OF_STOCK'}
           >
-            <Send className="w-3.5 h-3.5 mr-2" /> Request Drug
+            <ShoppingBag className="w-3.5 h-3.5 mr-2" /> Reserve Drug
+          </Button>
+          <Button
+            variant="outline"
+            className="flex-1 h-9"
+            onClick={() => setRequestOpen(true)}
+          >
+            <Send className="w-3.5 h-3.5 mr-2" /> Request Info
           </Button>
         </div>
       </div>
+
+      <ReserveDrugModal
+        isOpen={reserveOpen}
+        onClose={() => setReserveOpen(false)}
+        pharmacyId={pharmacyId}
+        pharmacyName={pharmacyName}
+        drugId={drugId}
+        drugName={drugName}
+        unitPrice={unitPrice}
+      />
 
       <Dialog open={requestOpen} onOpenChange={setRequestOpen}>
         <DialogContent className="sm:max-w-md">

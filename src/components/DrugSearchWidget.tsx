@@ -1,0 +1,324 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Search, MapPin, Loader2, AlertTriangle, Package, Pill } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { useDebounce } from '@/hooks/use-debounce';
+import { useGeolocation, HARARE_FALLBACK } from '@/hooks/use-geolocation';
+import { type StockStatus } from '@/components/StockStatusBadge';
+import { SmartEmptyState } from '@/components/SmartEmptyState';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+export interface DrugSearchResult {
+  pharmacy_id: string;
+  pharmacy_name: string;
+  suburb: string;
+  city: string;
+  phone: string;
+  lat: number;
+  lng: number;
+  drug_id: string;
+  drug_name: string;
+  unit_price: number | null;
+  quantity: number;
+  stock_status: StockStatus;
+  distance_km: number;
+}
+
+interface DrugSearchWidgetProps {
+  /** Called when results change (e.g. to sync the map) */
+  onResultsChange?: (results: DrugSearchResult[]) => void;
+  /** Called when a user clicks a result row */
+  onPharmacySelect?: (result: DrugSearchResult) => void;
+  /** If true, highlights the cheapest result differently */
+  highlightCheapest?: boolean;
+  /** Pre-fill the search field */
+  initialQuery?: string;
+  /** Optional city filter */
+  city?: string;
+  /** Show compact variant without the SmartEmptyState below */
+  compact?: boolean;
+}
+
+// ─── Skeleton loader ─────────────────────────────────────────────────────────
+function ResultSkeleton() {
+  return (
+    <div className="animate-pulse space-y-2">
+      {[1, 2, 3].map(i => (
+        <div
+          key={i}
+          className="flex items-center gap-3 p-3 rounded-xl border border-border"
+          style={{ background: 'hsl(var(--card))' }}
+        >
+          <div className="w-9 h-9 rounded-lg bg-muted flex-shrink-0" />
+          <div className="flex-1 space-y-1.5">
+            <div className="h-3.5 bg-muted rounded w-1/2" />
+            <div className="h-3 bg-muted rounded w-3/4" />
+          </div>
+          <div className="h-4 bg-muted rounded w-12" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Single result row ────────────────────────────────────────────────────────
+interface ResultRowProps {
+  result: DrugSearchResult;
+  isCheapest: boolean;
+  isSelected: boolean;
+  onClick: () => void;
+}
+
+function ResultRow({ result, isCheapest, isSelected, onClick }: ResultRowProps) {
+  const statusColor: Record<StockStatus, string> = {
+    IN_STOCK:    'hsl(142 70% 45%)',
+    LOW_STOCK:   'hsl(38 95% 50%)',
+    OUT_OF_STOCK:'hsl(0 72% 51%)',
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-all hover:scale-[1.01] active:scale-[0.99]"
+      style={{
+        background: isSelected
+          ? 'linear-gradient(180deg, hsl(174 50% 95%) 0%, hsl(174 40% 92%) 100%)'
+          : 'linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted)/0.3) 100%)',
+        borderColor: isSelected ? 'hsl(174 70% 55%)' : isCheapest ? 'hsl(45 90% 50%)' : 'hsl(var(--border))',
+        boxShadow: isSelected
+          ? '0 0 0 2px hsl(174 70% 55% / 0.3)'
+          : isCheapest
+          ? '0 0 0 2px hsl(45 90% 50% / 0.2)'
+          : 'var(--shadow-card)',
+      }}
+    >
+      {/* Status dot */}
+      <div
+        className="w-2 h-2 rounded-full mt-2 flex-shrink-0"
+        style={{ background: statusColor[result.stock_status] }}
+      />
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="font-medium text-sm text-foreground truncate">{result.drug_name}</span>
+          {isCheapest && (
+            <Badge
+              className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+              style={{ background: 'hsl(45 95% 52%)', color: '#7a4f00', border: '1px solid hsl(45 80% 62%)' }}
+            >
+              ⭐ Cheapest
+            </Badge>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground truncate mt-0.5">
+          {result.pharmacy_name} · {result.suburb}
+          {result.distance_km > 0 && (
+            <span className="ml-1 text-primary font-medium">{result.distance_km} km</span>
+          )}
+        </p>
+      </div>
+
+      {/* Price */}
+      <div className="flex-shrink-0 text-right">
+        {result.unit_price != null ? (
+          <span className="font-mono font-bold text-sm text-foreground">${result.unit_price.toFixed(2)}</span>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+        <p className="text-[10px] text-muted-foreground capitalize">
+          {result.stock_status === 'IN_STOCK' ? 'In stock' : result.stock_status === 'LOW_STOCK' ? 'Low' : 'Out'}
+        </p>
+      </div>
+    </button>
+  );
+}
+
+// ─── Main widget ──────────────────────────────────────────────────────────────
+export function DrugSearchWidget({
+  onResultsChange,
+  onPharmacySelect,
+  highlightCheapest = true,
+  initialQuery = '',
+  city,
+  compact = false,
+}: DrugSearchWidgetProps) {
+  const [query, setQuery] = useState(initialQuery);
+  const [results, setResults] = useState<DrugSearchResult[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searched, setSearched] = useState(false);
+
+  const debouncedQuery = useDebounce(query, 300);
+  const geo = useGeolocation();
+
+  const userLat = geo.lat ?? HARARE_FALLBACK.lat;
+  const userLng = geo.lng ?? HARARE_FALLBACK.lng;
+
+  const runSearch = useCallback(async (q: string) => {
+    if (!q.trim() || q.trim().length < 2) {
+      setResults([]);
+      onResultsChange?.([]);
+      setSearched(false);
+      return;
+    }
+
+    if (!isSupabaseConfigured) {
+      setError('Search is unavailable — Supabase is not configured.');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    setSearched(true);
+
+    try {
+      const { data, error: rpcError } = await supabase.rpc('find_nearby_pharmacies', {
+        p_query:     q.trim(),
+        p_lat:       userLat,
+        p_lng:       userLng,
+        p_radius_km: 50,
+        p_city:      city ?? null,
+      });
+
+      if (rpcError) throw rpcError;
+
+      const mapped: DrugSearchResult[] = (data || []).map((row: any) => ({
+        pharmacy_id:   row.pharmacy_id,
+        pharmacy_name: row.pharmacy_name,
+        suburb:        row.suburb,
+        city:          row.city,
+        phone:         row.phone,
+        lat:           row.lat,
+        lng:           row.lng,
+        drug_id:       row.drug_id,
+        drug_name:     row.drug_name,
+        unit_price:    row.unit_price != null ? parseFloat(row.unit_price) : null,
+        quantity:      row.quantity,
+        stock_status:  row.stock_status as StockStatus,
+        distance_km:   row.distance_km,
+      }));
+
+      setResults(mapped);
+      onResultsChange?.(mapped);
+    } catch (err: any) {
+      console.error('DrugSearchWidget RPC error:', err);
+      setError(err?.message || 'Search failed. Please try again.');
+      setResults([]);
+      onResultsChange?.([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userLat, userLng, city, onResultsChange]);
+
+  useEffect(() => {
+    runSearch(debouncedQuery);
+  }, [debouncedQuery, runSearch]);
+
+  const handleSelect = (r: DrugSearchResult) => {
+    setSelectedId(r.pharmacy_id);
+    onPharmacySelect?.(r);
+  };
+
+  // Find cheapest in-stock result
+  const inStockResults = results.filter(r => r.stock_status !== 'OUT_OF_STOCK' && r.unit_price != null);
+  const cheapestPrice = inStockResults.length > 0
+    ? Math.min(...inStockResults.map(r => r.unit_price!))
+    : null;
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Search input */}
+      <div className="relative">
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+        <Input
+          id="drug-search-widget-input"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          placeholder="Search drug name or symptom…"
+          className="pl-10 pr-10 h-11 text-sm"
+          style={{ boxShadow: 'var(--shadow-card)' }}
+        />
+        {/* Location indicator */}
+        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+          {geo.loading ? (
+            <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
+          ) : (
+            <MapPin
+              className="w-3.5 h-3.5"
+              style={{ color: geo.isFallback ? 'hsl(45 90% 50%)' : 'hsl(142 70% 45%)' }}
+              title={geo.isFallback ? `Location unavailable — showing Harare` : 'Using your location'}
+            />
+          )}
+        </div>
+      </div>
+
+      {/* Location fallback notice */}
+      {geo.isFallback && query.trim().length > 0 && (
+        <p className="text-xs text-amber-600 flex items-center gap-1.5 px-1">
+          <MapPin className="w-3 h-3 flex-shrink-0" />
+          Showing results near Harare (location access denied)
+        </p>
+      )}
+
+      {/* Loading state */}
+      {loading && <ResultSkeleton />}
+
+      {/* Error state */}
+      {!loading && error && (
+        <div className="flex items-center gap-2 p-3 rounded-xl border border-destructive/30 bg-destructive/5 text-sm text-destructive">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          {error}
+        </div>
+      )}
+
+      {/* Results */}
+      {!loading && !error && results.length > 0 && (
+        <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5" style={{ scrollbarWidth: 'thin' }}>
+          {/* Summary bar */}
+          <div className="flex items-center justify-between px-0.5 py-1">
+            <span className="text-xs text-muted-foreground">
+              {results.length} result{results.length !== 1 ? 's' : ''}
+            </span>
+            {cheapestPrice != null && highlightCheapest && (
+              <span className="text-xs font-medium" style={{ color: 'hsl(45 80% 35%)' }}>
+                ⭐ Cheapest: ${cheapestPrice.toFixed(2)}
+              </span>
+            )}
+          </div>
+
+          {results.map(r => (
+            <ResultRow
+              key={`${r.pharmacy_id}-${r.drug_id}`}
+              result={r}
+              isCheapest={highlightCheapest && r.unit_price === cheapestPrice && cheapestPrice != null}
+              isSelected={selectedId === r.pharmacy_id}
+              onClick={() => handleSelect(r)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Empty / Smart state */}
+      {!loading && !error && searched && results.length === 0 && !compact && (
+        <SmartEmptyState
+          query={query}
+          city={city}
+          onSearchSuggestion={suggestion => setQuery(suggestion)}
+        />
+      )}
+
+      {/* Idle placeholder */}
+      {!loading && !searched && !compact && (
+        <div className="flex flex-col items-center py-8 text-center">
+          <Pill className="w-10 h-10 text-muted-foreground/40 mb-3" />
+          <p className="text-sm text-muted-foreground max-w-xs">
+            Search a drug name like <strong className="text-foreground">paracetamol</strong>, or describe a symptom like <strong className="text-foreground">headache</strong>.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

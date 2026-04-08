@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { StockStatusBadge, type StockStatus } from '@/components/StockStatusBadge';
@@ -20,7 +20,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Plus, Search, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Upload, Download, FileSpreadsheet, Zap } from 'lucide-react';
 import { syncManager } from '@/lib/syncManager';
 
 interface StockItem {
@@ -48,9 +48,46 @@ const StockManagementPage = () => {
   const [editItemId, setEditItemId] = useState<string | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [flashedIds, setFlashedIds] = useState<Set<string>>(new Set());
+  const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   const { page, pageSize, setPage, setPageSize, nextPage, prevPage, pageSizeOptions } = useServerPagination({ defaultPageSize: 20 });
   const debouncedSearch = useDebounce(search, 300);
+
+  // ── Real-time stock subscription ────────────────────────────────────────
+  useEffect(() => {
+    if (!pharmacy?.id || !isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel(`stock-rt-${pharmacy.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pharmacy_stock',
+          filter: `pharmacy_id=eq.${pharmacy.id}`,
+        },
+        (payload) => {
+          // Invalidate and re-fetch
+          queryClient.invalidateQueries({ queryKey: ['stock', pharmacy.id] });
+          // Flash the updated row
+          const changedId = (payload.new as any)?.id || (payload.old as any)?.id;
+          if (changedId) {
+            setFlashedIds(prev => new Set(prev).add(changedId));
+            if (flashTimers.current[changedId]) clearTimeout(flashTimers.current[changedId]);
+            flashTimers.current[changedId] = setTimeout(() => {
+              setFlashedIds(prev => { const next = new Set(prev); next.delete(changedId); return next; });
+            }, 2000);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [pharmacy?.id, queryClient]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['stock', pharmacy?.id, debouncedSearch, filter, page, pageSize],
@@ -348,7 +385,15 @@ const StockManagementPage = () => {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Stock Management</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Stock Management</h1>
+          <span
+            className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full animate-pulse"
+            style={{ background: 'hsl(142 70% 90%)', color: 'hsl(142 60% 30%)', border: '1px solid hsl(142 60% 70%)' }}
+          >
+            <Zap className="w-2.5 h-2.5" /> LIVE
+          </span>
+        </div>
         <Button onClick={openAdd}><Plus className="w-4 h-4 mr-2" /> Add Drug</Button>
       </div>
 
@@ -395,7 +440,14 @@ const StockManagementPage = () => {
               </thead>
               <tbody>
                 {stockItems.map(item => (
-                  <tr key={item.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors table-row-skeu">
+                  <tr
+                    key={item.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors table-row-skeu"
+                    style={flashedIds.has(item.id) ? {
+                      background: 'hsl(142 70% 92%)',
+                      transition: 'background 0.5s ease',
+                    } : undefined}
+                  >
                     <td className="p-3">
                       <p className="font-medium text-foreground">{item.drugName} <span className="font-mono-drug text-xs text-muted-foreground">{item.strength}</span></p>
                       <p className="text-xs text-muted-foreground">{item.form}{item.expiry_date ? ` · Exp: ${item.expiry_date}` : ''}</p>
