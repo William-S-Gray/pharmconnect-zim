@@ -53,66 +53,39 @@ const SearchResultsPage = () => {
       setLoading(true);
       setMatchedDrugId(undefined);
       try {
-        const { data: supabaseResults, error } = await supabase
-          .from('pharmacy_stock')
-          .select(`
-            quantity,
-            unit_price,
-            threshold,
-            is_available,
-            drug_id,
-            pharmacy:pharmacies!pharmacy_id (
-              id, name, suburb, city, lat, lng, phone, status
-            ),
-            drug:drugs!drug_id (
-              id, generic_name, common_name, brand_names, search_terms
-            )
-          `)
-          .eq('pharmacy.city', cityParam)
-          .eq('pharmacy.status', 'APPROVED')
-          .or(`generic_name.ilike.%${drugQuery}%,common_name.ilike.%${drugQuery}%,brand_names.cs.{${drugQuery}},search_terms.cs.{${drugQuery}}`, { foreignTable: 'drug' });
-
-        if (error) throw error;
-
         const userLat = lat ? parseFloat(lat) : null;
         const userLng = lng ? parseFloat(lng) : null;
 
-        let firstDrugId: string | undefined;
-
-        const formatted: SearchResult[] = (supabaseResults || []).map((s: any) => {
-          let distance = 0;
-          if (userLat && userLng && s.pharmacy.lat && s.pharmacy.lng) {
-            const R = 6371;
-            const dLat = (s.pharmacy.lat - userLat) * Math.PI / 180;
-            const dLng = (s.pharmacy.lng - userLng) * Math.PI / 180;
-            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                      Math.cos(userLat * Math.PI / 180) * Math.cos(s.pharmacy.lat * Math.PI / 180) * 
-                      Math.sin(dLng / 2) * Math.sin(dLng / 2);
-            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            distance = Math.round(R * c * 10) / 10;
+        const { data, error } = await supabase.rpc(
+          "find_nearby_pharmacies",
+          {
+            p_query: drugQuery,
+            p_lat: userLat,
+            p_lng: userLng,
+            p_radius_km: 50,
+            p_city: cityParam,
           }
+        );
 
-          if (!firstDrugId && s.drug?.id) {
-            firstDrugId = s.drug.id;
-          }
+        if (error) throw error;
 
-          return {
-            pharmacy_id: s.pharmacy.id,
-            drug_id: s.drug?.id || s.drug_id,
-            pharmacy_name: s.pharmacy.name,
-            suburb: s.pharmacy.suburb,
-            city: s.pharmacy.city,
-            phone: s.pharmacy.phone,
-            lat: s.pharmacy.lat,
-            lng: s.pharmacy.lng,
-            quantity: s.quantity,
-            unit_price: s.unit_price,
-            stock_status: s.quantity === 0 || !s.is_available ? 'OUT_OF_STOCK' : (s.quantity <= s.threshold ? 'LOW_STOCK' : 'IN_STOCK'),
-            distance_km: distance,
-          };
-        });
+        const formatted: SearchResult[] = (data || []).map((item: any) => ({
+          pharmacy_id: item.pharmacy_id,
+          drug_id: item.drug_id,
+          pharmacy_name: item.pharmacy_name,
+          suburb: item.suburb,
+          city: item.city,
+          phone: item.phone,
+          lat: item.lat,
+          lng: item.lng,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          stock_status: item.stock_status,
+          distance_km: item.distance_km,
+        }));
         
         setResults(formatted);
+        const firstDrugId = data?.[0]?.drug_id;
         if (firstDrugId) setMatchedDrugId(firstDrugId);
 
         supabase.from('drug_searches').insert([{
