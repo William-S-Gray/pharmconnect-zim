@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
@@ -29,7 +29,7 @@ const mapContainerStyle = {
 };
 
 const defaultCenter = {
-  lat: -17.8292, // Harare
+  lat: -17.8292,
   lng: 31.0522,
 };
 
@@ -49,16 +49,17 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
     setSelected(marker);
     setDistanceInfo(null);
     if (userLat && userLng) {
-      const info = await getDrivingDistance({ lat: userLat, lng: userLng }, { lat: marker.lat, lng: marker.lng });
+      const info = await getDrivingDistance(
+        { lat: userLat, lng: userLng },
+        { lat: marker.lat, lng: marker.lng }
+      );
       setDistanceInfo(info);
     }
   };
 
   const mapCenter = useMemo(() => {
     if (center) return center;
-    if (markers.length > 0) {
-      return { lat: markers[0].lat, lng: markers[0].lng };
-    }
+    if (markers.length > 0) return { lat: markers[0].lat, lng: markers[0].lng };
     return defaultCenter;
   }, [center, markers]);
 
@@ -66,7 +67,7 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-6 text-center bg-muted/30 rounded-xl border border-dashed">
         <p className="text-sm font-medium text-foreground">Google Maps API Key Missing</p>
-        <p className="text-xs text-muted-foreground mt-1">Please add VITE_GOOGLE_MAPS_API_KEY to your .env file to enable the map.</p>
+        <p className="text-xs text-muted-foreground mt-1">Add VITE_GOOGLE_MAPS_API_KEY to your .env file.</p>
       </div>
     );
   }
@@ -99,20 +100,57 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
           position={{ lat: selected.lat, lng: selected.lng }}
           onCloseClick={() => { setSelected(null); setDistanceInfo(null); }}
         >
-          <div className="p-2 min-w-[200px]">
-            <h4 className="font-heading font-semibold text-sm">{selected.pharmacy_name}</h4>
-            <p className="text-xs text-muted-foreground mb-1">{selected.suburb}, {selected.city}</p>
+          <div style={{ padding: '6px 2px', minWidth: '210px', fontFamily: 'DM Sans, sans-serif' }}>
+            <p style={{ fontWeight: 600, fontSize: '13px', margin: '0 0 2px', color: '#111827' }}>
+              {selected.pharmacy_name}
+            </p>
+            <p style={{ fontSize: '11px', color: '#6B7280', margin: '0 0 6px' }}>
+              {selected.suburb}, {selected.city}
+            </p>
+
             {distanceInfo && (
-              <p className="text-[10px] font-medium text-accent mb-2">
+              <div style={{
+                background: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '6px',
+                padding: '5px 8px',
+                marginBottom: '8px',
+                fontSize: '11px',
+                color: '#166534',
+                fontWeight: 500,
+              }}>
                 🚗 {distanceInfo.distance_text} · {distanceInfo.duration_text} drive
-              </p>
+              </div>
             )}
-            <div className="flex items-center justify-between gap-2 mt-1">
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginBottom: '8px' }}>
               <StockStatusBadge status={selected.stock_status} />
               {selected.unit_price && (
-                <span className="text-xs font-bold font-mono-drug">${selected.unit_price.toFixed(2)}</span>
+                <span style={{ fontSize: '13px', fontWeight: 700, fontFamily: 'JetBrains Mono, monospace', color: '#059669' }}>
+                  ${selected.unit_price.toFixed(2)}
+                </span>
               )}
             </div>
+
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&destination=${selected.lat},${selected.lng}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'block',
+                textAlign: 'center',
+                background: 'hsl(174, 100%, 24%)',
+                color: '#fff',
+                borderRadius: '6px',
+                padding: '6px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                textDecoration: 'none',
+                marginBottom: '4px',
+              }}
+            >
+              Get Directions →
+            </a>
           </div>
         </InfoWindow>
       )}
@@ -125,51 +163,18 @@ export function PharmacyMap({ markers, center, zoom = 12 }: PharmacyMapProps) {
 }
 
 function getMarkerIcon(status: StockStatus): string {
-  // Return different colored pins based on status
   if (status === 'IN_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/green-dot.png';
   if (status === 'LOW_STOCK') return 'https://maps.google.com/mapfiles/ms/icons/yellow-dot.png';
   return 'https://maps.google.com/mapfiles/ms/icons/red-dot.png';
 }
 
 const mapStyles = [
-  {
-    "featureType": "administrative",
-    "elementType": "labels.text.fill",
-    "stylers": [{ "color": "#444444" }]
-  },
-  {
-    "featureType": "landscape",
-    "elementType": "all",
-    "stylers": [{ "color": "#f2f2f2" }]
-  },
-  {
-    "featureType": "poi",
-    "elementType": "all",
-    "stylers": [{ "visibility": "off" }]
-  },
-  {
-    "featureType": "road",
-    "elementType": "all",
-    "stylers": [{ "saturation": -100 }, { "lightness": 45 }]
-  },
-  {
-    "featureType": "road.highway",
-    "elementType": "all",
-    "stylers": [{ "visibility": "simplified" }]
-  },
-  {
-    "featureType": "road.arterial",
-    "elementType": "labels.icon",
-    "stylers": [{ "visibility": "off" }]
-  },
-  {
-    "featureType": "transit",
-    "elementType": "all",
-    "stylers": [{ "visibility": "off" }]
-  },
-  {
-    "featureType": "water",
-    "elementType": "all",
-    "stylers": [{ "color": "#007A6E" }, { "visibility": "on" }]
-  }
+  { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#444444' }] },
+  { featureType: 'landscape', elementType: 'all', stylers: [{ color: '#f2f2f2' }] },
+  { featureType: 'poi', elementType: 'all', stylers: [{ visibility: 'off' }] },
+  { featureType: 'road', elementType: 'all', stylers: [{ saturation: -100 }, { lightness: 45 }] },
+  { featureType: 'road.highway', elementType: 'all', stylers: [{ visibility: 'simplified' }] },
+  { featureType: 'road.arterial', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { featureType: 'transit', elementType: 'all', stylers: [{ visibility: 'off' }] },
+  { featureType: 'water', elementType: 'all', stylers: [{ color: '#007A6E' }, { visibility: 'on' }] },
 ];

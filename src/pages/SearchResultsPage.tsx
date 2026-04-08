@@ -5,7 +5,8 @@ import { DrugSearchBar } from '@/components/DrugSearchBar';
 import { PharmacyResultCard } from '@/components/PharmacyResultCard';
 import { EmptyState } from '@/components/EmptyState';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { SearchX, Map as MapIcon, List } from 'lucide-react';
+import { DrugInfoPanel } from '@/components/DrugInfoPanel';
+import { SearchX, Map as MapIcon, List, BookOpen, ChevronDown, ChevronUp } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
@@ -40,6 +41,8 @@ const SearchResultsPage = () => {
   const [sortBy, setSortBy] = useState<'nearest' | 'price' | 'stock'>('stock');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  const [matchedDrugId, setMatchedDrugId] = useState<string | undefined>(undefined);
+  const [drugInfoOpen, setDrugInfoOpen] = useState(true);
 
   useEffect(() => {
     if (!drugQuery) return;
@@ -48,6 +51,7 @@ const SearchResultsPage = () => {
       if (!isSupabaseConfigured) return;
       
       setLoading(true);
+      setMatchedDrugId(undefined);
       try {
         const { data: supabaseResults, error } = await supabase
           .from('pharmacy_stock')
@@ -56,11 +60,12 @@ const SearchResultsPage = () => {
             unit_price,
             threshold,
             is_available,
+            drug_id,
             pharmacy:pharmacies!inner (
               id, name, suburb, city, lat, lng, phone, status
             ),
             drug:drugs!inner (
-              generic_name, common_name, brand_names, search_terms
+              id, generic_name, common_name, brand_names, search_terms
             )
           `)
           .eq('pharmacy.city', cityParam)
@@ -72,11 +77,12 @@ const SearchResultsPage = () => {
         const userLat = lat ? parseFloat(lat) : null;
         const userLng = lng ? parseFloat(lng) : null;
 
+        let firstDrugId: string | undefined;
+
         const formatted: SearchResult[] = (supabaseResults || []).map((s: any) => {
           let distance = 0;
           if (userLat && userLng && s.pharmacy.lat && s.pharmacy.lng) {
-            // Haversine formula
-            const R = 6371; // km
+            const R = 6371;
             const dLat = (s.pharmacy.lat - userLat) * Math.PI / 180;
             const dLng = (s.pharmacy.lng - userLng) * Math.PI / 180;
             const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -84,14 +90,15 @@ const SearchResultsPage = () => {
                       Math.sin(dLng / 2) * Math.sin(dLng / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             distance = Math.round(R * c * 10) / 10;
-          } else {
-            // Null if no location available
-            distance = 0;
+          }
+
+          if (!firstDrugId && s.drug?.id) {
+            firstDrugId = s.drug.id;
           }
 
           return {
             pharmacy_id: s.pharmacy.id,
-            drug_id: s.drug_id,
+            drug_id: s.drug?.id || s.drug_id,
             pharmacy_name: s.pharmacy.name,
             suburb: s.pharmacy.suburb,
             city: s.pharmacy.city,
@@ -106,14 +113,14 @@ const SearchResultsPage = () => {
         });
         
         setResults(formatted);
+        if (firstDrugId) setMatchedDrugId(firstDrugId);
 
-        // Async log search
         supabase.from('drug_searches').insert([{
           query: drugQuery,
           city: cityParam,
           result_count: formatted.length
-        }]).then(({ error }) => {
-          if (error) console.error('Analytics error:', error);
+        }]).then(({ error: e }) => {
+          if (e) console.error('Analytics error:', e);
         });
 
       } catch (err) {
@@ -125,6 +132,7 @@ const SearchResultsPage = () => {
     };
 
     fetchResults();
+    setDrugInfoOpen(true);
   }, [drugQuery, cityParam, lat, lng]);
 
   const sorted = useMemo(() => {
@@ -166,8 +174,40 @@ const SearchResultsPage = () => {
 
       <div className="container mx-auto px-4 py-6">
         <div className="flex flex-col lg:flex-row gap-6">
-          <div className="flex-1">
 
+          {/* ── Main results column ── */}
+          <div className="flex-1 min-w-0">
+
+            {/* Mobile: collapsible drug info banner */}
+            {drugQuery && (
+              <div className="lg:hidden mb-4">
+                <button
+                  onClick={() => setDrugInfoOpen(v => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border border-border bg-card text-sm font-medium text-foreground"
+                  style={{ boxShadow: 'var(--shadow-card)' }}
+                >
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-primary" />
+                    Drug information for &ldquo;{drugQuery}&rdquo;
+                  </div>
+                  {drugInfoOpen
+                    ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                    : <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  }
+                </button>
+                {drugInfoOpen && (
+                  <div className="mt-2">
+                    <DrugInfoPanel
+                      drugQuery={drugQuery}
+                      drugId={matchedDrugId}
+                      onClose={() => setDrugInfoOpen(false)}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Results header */}
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
                 <h1 className="font-heading font-semibold text-lg text-foreground text-emboss">
@@ -275,11 +315,32 @@ const SearchResultsPage = () => {
             )}
           </div>
 
-          <div className="hidden lg:block w-96 flex-shrink-0">
-            <div className="sticky top-20 h-[calc(100vh-6rem)] skeu-inset overflow-hidden border">
-              <PharmacyMap markers={mapMarkers} />
+          {/* ── Desktop right sidebar: Map + Drug Info ── */}
+          <div className="hidden lg:flex lg:flex-col w-96 flex-shrink-0 gap-4">
+            <div
+              className="sticky top-20 flex flex-col gap-4"
+              style={{ maxHeight: 'calc(100vh - 5.5rem)', overflow: 'hidden' }}
+            >
+              {/* Map panel */}
+              <div className="h-72 skeu-inset overflow-hidden border rounded-xl flex-shrink-0">
+                <PharmacyMap markers={mapMarkers} />
+              </div>
+
+              {/* Drug info panel — scrollable */}
+              {drugQuery && (
+                <div
+                  className="flex-1 overflow-y-auto rounded-xl"
+                  style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--border)) transparent' }}
+                >
+                  <DrugInfoPanel
+                    drugQuery={drugQuery}
+                    drugId={matchedDrugId}
+                  />
+                </div>
+              )}
             </div>
           </div>
+
         </div>
       </div>
     </div>
@@ -287,4 +348,3 @@ const SearchResultsPage = () => {
 };
 
 export default SearchResultsPage;
-
