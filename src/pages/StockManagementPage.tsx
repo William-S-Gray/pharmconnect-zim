@@ -104,7 +104,7 @@ const StockManagementPage = () => {
           threshold,
           expiry_date,
           is_available,
-          drugs!inner (
+          drugs!drug_id (
             generic_name,
             common_name,
             strength,

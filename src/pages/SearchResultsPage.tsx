@@ -61,10 +61,10 @@ const SearchResultsPage = () => {
             threshold,
             is_available,
             drug_id,
-            pharmacy:pharmacies!inner (
+            pharmacy:pharmacies!pharmacy_id (
               id, name, suburb, city, lat, lng, phone, status
             ),
-            drug:drugs!inner (
+            drug:drugs!drug_id (
               id, generic_name, common_name, brand_names, search_terms
             )
           `)
