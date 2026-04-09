@@ -7,14 +7,16 @@
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS boolean AS $$
 BEGIN
-  RETURN EXISTS (
-    SELECT 1 
-    FROM public.profiles 
-    WHERE id = auth.uid() 
-    AND global_role = 'super_admin'
+  -- Use auth.jwt() to check metadata and email without querying the profiles table
+  RETURN (
+    COALESCE((auth.jwt() ->> 'email'), '') = 'graywilliamwiltino@gmail.com'
+    OR
+    COALESCE((auth.jwt() -> 'user_metadata' ->> 'role'), '') = 'super_admin'
+    OR
+    COALESCE((auth.jwt() -> 'app_metadata' ->> 'role'), '') = 'super_admin'
   );
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql STABLE SECURITY DEFINER;
 
 -- 2. Update Profiles Policies
 DROP POLICY IF EXISTS "Super Admins can read all profiles" ON public.profiles;
