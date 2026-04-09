@@ -12,7 +12,8 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { logAuditEvent } from '@/lib/auditUtils';
+import { useAuth } from '@/context/AuthContext';
 import { requestDeletion } from '@/lib/lifecycleUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
@@ -27,7 +28,7 @@ interface PharmacyUser {
   city: string;
   suburb: string;
   address?: string;
-  status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
+  status: 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'REJECTED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
   drug_count: number;
   joined: string;
@@ -40,7 +41,7 @@ type UserFormData = {
   phone: string;
   city: string;
   suburb: string;
-  status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
+  status: 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'REJECTED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
   password?: string;
   admin_name?: string;
@@ -64,6 +65,7 @@ const emptyForm: UserFormData = {
 const cities = ['Harare', 'Bulawayo', 'Mutare', 'Gweru'];
 
 const AdminPharmaciesPage = () => {
+  const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
@@ -109,19 +111,38 @@ const AdminPharmaciesPage = () => {
     },
   });
 
-  const toggleStatusMutation = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status, name, email }: { id: string; status: string; name: string; email: string }) => {
       const { error } = await supabase
         .from('pharmacies')
         .update({ status })
         .eq('id', id);
       if (error) throw error;
+
+      await logAuditEvent({
+        action: (status === 'APPROVED' ? 'approve' : status === 'REJECTED' ? 'reject' : 'update') as any,
+        category: 'user_mgmt',
+        target: name,
+        detail: `Pharmacy ${name} (${email}) status updated to ${status}`,
+        metadata: { pharmacy_id: id, status }
+      });
+    },
+    onMutate: async (vars) => {
+      await queryClient.cancelQueries({ queryKey: ['admin', 'pharmacies'] });
+      const previous = queryClient.getQueryData(['admin', 'pharmacies']);
+      queryClient.setQueryData(['admin', 'pharmacies'], (old: PharmacyUser[] | undefined) => 
+        old?.map(p => p.id === vars.id ? { ...p, status: vars.status as any } : p)
+      );
+      return { previous };
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
-      toast.success(`Pharmacy ${vars.status === 'SUSPENDED' ? 'suspended' : 'reactivated'}`);
+      toast.success(`Pharmacy ${vars.status.toLowerCase()} successfully`);
     },
-    onError: (error: any) => toast.error(error.message || 'Failed to update status'),
+    onError: (err: any, vars, context: any) => {
+      if (context?.previous) queryClient.setQueryData(['admin', 'pharmacies'], context.previous);
+      toast.error(err.message || 'Failed to update status');
+    },
   });
 
   const changePlanMutation = useMutation({
@@ -229,6 +250,7 @@ const AdminPharmaciesPage = () => {
     switch (status) {
       case 'APPROVED': return <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/20 text-xs">Active</Badge>;
       case 'SUSPENDED': return <Badge variant="outline" className="bg-destructive/10 text-destructive border-destructive/20 text-xs">Suspended</Badge>;
+      case 'REJECTED': return <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/20 text-xs">Rejected</Badge>;
       case 'PENDING': return <Badge variant="outline" className="bg-orange-500/10 text-orange-600 border-orange-500/20 text-xs">Pending</Badge>;
       default: return null;
     }
@@ -287,6 +309,7 @@ const AdminPharmaciesPage = () => {
               <SelectItem value="PENDING">Pending</SelectItem>
               <SelectItem value="APPROVED">Approved</SelectItem>
               <SelectItem value="SUSPENDED">Suspended</SelectItem>
+              <SelectItem value="REJECTED">Rejected</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -361,6 +384,7 @@ const AdminPharmaciesPage = () => {
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="APPROVED">Active</SelectItem>
             <SelectItem value="SUSPENDED">Suspended</SelectItem>
+            <SelectItem value="REJECTED">Rejected</SelectItem>
             <SelectItem value="PENDING">Pending</SelectItem>
           </SelectContent>
         </Select>
@@ -409,12 +433,37 @@ const AdminPharmaciesPage = () => {
                     <Button size="sm" variant="outline" onClick={() => { setChangePlanUser(u); setNewPlan(u.plan_tier); }}>
                       <CreditCard className="w-3.5 h-3.5 mr-1" /> Plan
                     </Button>
+                    {u.status === 'PENDING' && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          disabled={updateStatusMutation.isPending}
+                          onClick={() => updateStatusMutation.mutate({ id: u.id, status: 'APPROVED', name: u.name, email: u.email })}
+                        >
+                          <CheckCircle className="w-3.5 h-3.5 mr-1" /> Approve
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={updateStatusMutation.isPending}
+                          onClick={() => updateStatusMutation.mutate({ id: u.id, status: 'REJECTED', name: u.name, email: u.email })}
+                        >
+                          <Ban className="w-3.5 h-3.5 mr-1" /> Reject
+                        </Button>
+                      </>
+                    )}
                     {u.status !== 'PENDING' && (
                       <Button
                         size="sm"
-                        variant={u.status === 'SUSPENDED' ? 'default' : 'destructive'}
-                        disabled={toggleStatusMutation.isPending}
-                        onClick={() => toggleStatusMutation.mutate({ id: u.id, status: u.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED' })}
+                        variant={u.status === 'SUSPENDED' ? 'default' : 'outline'}
+                        disabled={updateStatusMutation.isPending}
+                        onClick={() => updateStatusMutation.mutate({ 
+                          id: u.id, 
+                          status: u.status === 'SUSPENDED' ? 'APPROVED' : 'SUSPENDED',
+                          name: u.name,
+                          email: u.email
+                        })}
                       >
                         {u.status === 'SUSPENDED' ? <><CheckCircle className="w-3.5 h-3.5 mr-1" /> Reactivate</> : <><Ban className="w-3.5 h-3.5 mr-1" /> Suspend</>}
                       </Button>

@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { logAuditEvent } from '@/lib/auditUtils';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
@@ -42,6 +43,7 @@ const UserManagementPage = () => {
   const [editUser, setEditUser] = useState<ManagedUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<ManagedUser | null>(null);
   const [demoteUser, setDemoteUser] = useState<ManagedUser | null>(null);
+  const [confirmSuperAdminUser, setConfirmSuperAdminUser] = useState<ManagedUser | null>(null);
 
   const [formData, setFormData] = useState({
     full_name: '',
@@ -146,6 +148,14 @@ const UserManagementPage = () => {
         const { error: mError } = await supabase.from('memberships').update({ role: membership_role }).eq('user_id', id);
         if (mError) throw mError;
       }
+
+      await logAuditEvent({
+        action: 'update',
+        category: 'user_mgmt',
+        target: full_name || id,
+        detail: `User ${full_name} updated. Global: ${global_role}, Membership: ${membership_role}`,
+        metadata: { target_user_id: id, global_role, membership_role }
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
@@ -167,6 +177,14 @@ const UserManagementPage = () => {
       } else {
          return requestDeletion('profiles', user.id, 'Administrative removal', user.pharmacy_id);
       }
+
+      await logAuditEvent({
+        action: 'delete',
+        category: 'user_mgmt',
+        target: user.full_name,
+        detail: `User ${user.full_name} moved to trash`,
+        metadata: { target_user_id: user.id }
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
@@ -180,10 +198,21 @@ const UserManagementPage = () => {
     if (!demoteUser) return;
     updateMutation.mutate({ 
       id: demoteUser.id, 
+      full_name: demoteUser.full_name,
       global_role: 'pharmacy_staff', 
       membership_role: 'pharmacy_staff' 
     });
     setDemoteUser(null);
+  };
+
+  const handlePromoteToSuperAdmin = () => {
+    if (!confirmSuperAdminUser) return;
+    updateMutation.mutate({ 
+      id: confirmSuperAdminUser.id, 
+      full_name: confirmSuperAdminUser.full_name,
+      global_role: 'super_admin' 
+    });
+    setConfirmSuperAdminUser(null);
   };
 
   const resetPassword = async (email: string) => {
@@ -224,9 +253,9 @@ const UserManagementPage = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="super_admin">Super Admin</SelectItem>
-            <SelectItem value="pharmacy_admin">Pharmacy Admin</SelectItem>
-            <SelectItem value="pharmacy_staff">Pharmacy Staff</SelectItem>
+            <SelectItem value="super_admin">SUPER ADMIN</SelectItem>
+            <SelectItem value="pharmacy_admin">ADMIN</SelectItem>
+            <SelectItem value="pharmacy_staff">USER</SelectItem>
           </SelectContent>
         </Select>
         <div className={cn("contents", myRole !== 'super_admin' && "hidden")}>
@@ -268,8 +297,8 @@ const UserManagementPage = () => {
                     </div>
                   </td>
                   <td className="p-4 text-center">
-                    <Badge variant={u.global_role === 'super_admin' ? 'default' : 'secondary'} className="capitalize">
-                      {u.global_role?.replace('_', ' ') || 'N/A'}
+                    <Badge variant={u.global_role === 'super_admin' ? 'default' : 'secondary'} className="capitalize bg-opacity-20 border-border">
+                      {u.global_role === 'super_admin' ? 'SUPER ADMIN' : u.global_role === 'pharmacy_admin' ? 'ADMIN' : 'USER'}
                     </Badge>
                   </td>
                   <td className="p-4 capitalize">{u.membership_role?.replace('_', ' ') || 'N/A'}</td>
@@ -469,10 +498,50 @@ const UserManagementPage = () => {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancel</Button>
-            <Button onClick={() => editUser && updateMutation.mutate(editUser)}>Save Changes</Button>
+            <Button onClick={() => {
+              if (editUser && editUser.global_role === 'super_admin' && users.find(u => u.id === editUser.id)?.global_role !== 'super_admin') {
+                setConfirmSuperAdminUser(editUser);
+                setEditUser(null);
+              } else if (editUser) {
+                updateMutation.mutate(editUser);
+              }
+            }}>
+              Save Changes
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Super Admin Promotion Confirmation */}
+      <AlertDialog open={!!confirmSuperAdminUser} onOpenChange={o => !o && setConfirmSuperAdminUser(null)}>
+        <AlertDialogContent className="dialog-skeu border-2 border-primary/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-primary">
+              <Shield className="w-5 h-5" />
+              Elevate to SUPER ADMIN?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-foreground">
+              <p className="mb-3">
+                You are about to promote <strong>{confirmSuperAdminUser?.full_name}</strong> to <strong>SUPER ADMIN</strong> status.
+              </p>
+              <div className="bg-muted p-3 rounded-lg text-xs space-y-1 text-muted-foreground border border-border">
+                <p>• They will have full access to all pharmacies and drugs</p>
+                <p>• They can manage other users and system configurations</p>
+                <p>• They can view all audit logs and sensitive data</p>
+              </div>
+              <p className="mt-4 font-semibold text-destructive">
+                This action will be logged and is highly sensitive.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handlePromoteToSuperAdmin} className="bg-primary hover:bg-primary/90">
+              Confirm Promotion
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Demotion Alert */}
       <AlertDialog open={!!demoteUser} onOpenChange={o => !o && setDemoteUser(null)}>

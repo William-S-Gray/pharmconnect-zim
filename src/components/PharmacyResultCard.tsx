@@ -163,12 +163,21 @@ export function PharmacyResultCard({
           >
             <ShoppingBag className="w-3.5 h-3.5 mr-2" /> Reserve Drug
           </Button>
+          <a href={directionsUrl} target="_blank" rel="noopener noreferrer" className="flex-1">
+            <Button
+              variant="outline"
+              className="w-full h-9 border-accent/30 hover:bg-accent/5 text-accent"
+            >
+              <Navigation className="w-3.5 h-3.5 mr-2" /> Directions
+            </Button>
+          </a>
           <Button
-            variant="outline"
-            className="flex-1 h-9"
+            variant="ghost"
+            className="px-3 h-9"
             onClick={() => setRequestOpen(true)}
+            title="Request info"
           >
-            <Send className="w-3.5 h-3.5 mr-2" /> Request Info
+            <Send className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>

@@ -48,28 +48,35 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
   useEffect(() => {
     if (!query) { setLoaded(true); return; }
 
-    // 1. Try Supabase symptom_drug_map table first
-    if (isSupabaseConfigured) {
-      supabase
-        .from('symptom_drug_map')
-        .select('drug_names, medical_tip, emoji')
-        .eq('is_active', true)
-        .ilike('symptom', `%${query.toLowerCase()}%`)
-        .limit(1)
-        .single()
-        .then(({ data, error }) => {
-          if (!error && data) {
-            setMatch({ drugs: data.drug_names, tip: data.medical_tip || '', emoji: data.emoji || '💊' });
-          } else {
-            // 2. Fallback to local map
-            setMatch(matchLocal(query));
+    const fetchSuggestions = async () => {
+      // 1. Try Supabase symptom suggestions RPC
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabase.rpc('get_symptom_suggestions', { p_query: query });
+          
+          if (!error && data && data.length > 0) {
+            const firstMatch = data[0];
+            if (firstMatch.symptom_detected) {
+              setMatch({ 
+                drugs: firstMatch.suggested_drugs || [], 
+                tip: firstMatch.tip || '', 
+                emoji: '💊' // Default emoji as it's not in RPC
+              });
+              setLoaded(true);
+              return;
+            }
           }
-          setLoaded(true);
-        });
-    } else {
+        } catch (err) {
+          console.warn('Symptom RPC failed:', err);
+        }
+      }
+      
+      // 2. Fallback to local map
       setMatch(matchLocal(query));
       setLoaded(true);
-    }
+    };
+
+    fetchSuggestions();
   }, [query]);
 
   if (!loaded) return null;

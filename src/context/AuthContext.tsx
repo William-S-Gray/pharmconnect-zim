@@ -13,7 +13,7 @@ export interface Pharmacy {
   phone: string;
   city: string;
   suburb: string;
-  status: 'PENDING' | 'APPROVED' | 'SUSPENDED';
+  status: 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'REJECTED';
   plan_tier: 'FREE' | 'BASIC' | 'PRO';
   lat?: number;
   lng?: number;
@@ -91,73 +91,81 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let resolveFetch: (() => void) | undefined;
     fetchPromise.current = new Promise<void>((resolve) => { resolveFetch = resolve; });
 
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('Profile fetch timed out')), 8000);
+    });
+
     try {
       let profileData: UserProfile | null = null;
       let finalRole: UserRole | null = null;
       let finalPharmacy: Pharmacy | null = null;
 
-      // 1. Try RPC first (fast path)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
+      // Wrap the fetch logic in a promise so we can race it against the timeout
+      const fetchLogic = async () => {
+        // 1. Try RPC first (fast path)
+        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
 
-      if (!rpcError && rpcData) {
-        profileData = rpcData.profile;
-        if (rpcData.membership) {
-          finalPharmacy = rpcData.membership.pharmacy;
-          finalRole = rpcData.membership.role;
-        } else if (profileData) {
-          finalRole = profileData.global_role;
-        }
-      } else {
-        // 2. FALLBACK: sequential fetch (RPC not deployed yet)
-        console.warn('RPC unavailable, sequential fallback:', rpcError?.message);
-
-        const { data: pData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-
-        if (pData) {
-          profileData = pData as UserProfile;
+        if (!rpcError && rpcData) {
+          profileData = rpcData.profile;
+          if (rpcData.membership) {
+            finalPharmacy = rpcData.membership.pharmacy;
+            finalRole = rpcData.membership.role;
+          } else if (profileData) {
+            finalRole = profileData.global_role;
+          }
         } else {
-          // Profile row missing — auto-create from session metadata
-          const { data: { user: authUser } } = await supabase.auth.getUser();
-          if (authUser) {
-            const { data: upserted } = await supabase
-              .from('profiles')
-              .upsert({
-                id: userId,
-                email: authUser.email ?? '',
-                full_name: authUser.user_metadata?.name ?? authUser.user_metadata?.full_name ?? '',
-                global_role: 'pharmacy_staff',
-              }, { onConflict: 'id' })
-              .select()
-              .maybeSingle();
-            if (upserted) profileData = upserted as UserProfile;
+          // 2. FALLBACK: sequential fetch
+          const { data: pData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (pData) {
+            profileData = pData as UserProfile;
+          } else {
+            // Profile row missing — auto-create from session metadata
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
+              const isDashboardAdmin = authUser.app_metadata?.role === 'super_admin' || 
+                                     authUser.user_metadata?.role === 'super_admin' ||
+                                     authUser.email === 'graywilliamwiltino@gmail.com';
+
+              const { data: upserted } = await supabase
+                .from('profiles')
+                .upsert({
+                  id: userId,
+                  email: authUser.email ?? '',
+                  full_name: authUser.user_metadata?.name ?? authUser.user_metadata?.full_name ?? 'System User',
+                  global_role: isDashboardAdmin ? 'super_admin' : 'pharmacy_staff',
+                }, { onConflict: 'id' })
+                .select()
+                .maybeSingle();
+              if (upserted) profileData = upserted as UserProfile;
+            }
+          }
+
+          // Fetch membership
+          const { data: mData } = await supabase
+            .from('memberships')
+            .select('role, pharmacy_id, pharmacies (*)')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (mData) {
+            finalPharmacy = mData.pharmacies as unknown as Pharmacy;
+            finalRole = (mData.role as UserRole) || (profileData?.global_role as UserRole);
+          } else if (profileData) {
+            finalRole = profileData.global_role as UserRole;
           }
         }
+      };
 
-        // Fetch membership — super_admin may have none, that is valid
-        const { data: mData } = await supabase
-          .from('memberships')
-          .select('role, pharmacy_id, pharmacies (*)')
-          .eq('user_id', userId)
-          .maybeSingle();
-
-        if (mData) {
-          finalPharmacy = mData.pharmacies as unknown as Pharmacy;
-          // Priority: membership role -> profile global_role
-          finalRole = (mData.role as UserRole) || (profileData?.global_role as UserRole);
-        } else if (profileData) {
-          finalRole = profileData.global_role as UserRole;
-        }
-      }
+      await Promise.race([fetchLogic(), timeoutPromise]);
 
       if (!finalRole) {
         console.warn('No role determined for user', userId);
-        fetchPromise.current = null;
-        resolveFetch?.();
-        return;
+        finalRole = 'pharmacy_staff'; // Final fallback to allow login
       }
 
       if (profileData) setProfile(profileData);
@@ -173,8 +181,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     } catch (error) {
       console.error('Critical error in fetchFullProfile:', error);
-      fetchPromise.current = null;
     } finally {
+      fetchPromise.current = null;
       resolveFetch?.();
     }
   }, []);

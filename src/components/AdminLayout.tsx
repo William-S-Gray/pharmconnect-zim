@@ -1,5 +1,5 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert, AlertTriangle } from 'lucide-react';
+import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert, AlertTriangle, ShoppingBag } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +15,7 @@ const adminNavItems = [
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Pharmacies', icon: Store, path: '/admin/pharmacies' },
+  { label: 'Reservations', icon: ShoppingBag, path: '/admin/reservations' },
   { label: 'User Management', icon: Users, path: '/admin/users' },
   { label: 'Delete Requests', icon: ShieldAlert, path: '/admin/delete-requests', badgeKey: 'deleteRequests' },
   { label: 'System Trash', icon: Trash2, path: '/admin/trash' },

@@ -41,6 +41,7 @@ const AdminStaffPage = lazy(() => import("./pages/admin/AdminStaffPage"));
 const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
 const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 const AdminDeleteRequestsPage = lazy(() => import("./pages/admin/AdminDeleteRequestsPage"));
+const AdminReservationsPage = lazy(() => import("./pages/admin/AdminReservationsPage"));
 const ConflictManagementPage = lazy(() => import("./pages/admin/ConflictManagementPage"));
 
 const queryClient = new QueryClient({
@@ -112,6 +113,7 @@ const App = () => (
               <Route path="delete-requests" element={<AdminDeleteRequestsPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="audit-log" element={<AdminAuditLogPage />} />
+              <Route path="reservations" element={<AdminReservationsPage />} />
               <Route path="profile" element={<AdminProfilePage />} />
               <Route path="conflicts" element={<ConflictManagementPage />} />
             </Route>
