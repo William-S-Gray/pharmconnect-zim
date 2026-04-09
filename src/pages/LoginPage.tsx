@@ -13,7 +13,7 @@ import { loginSchema } from '@/lib/schemas';
 const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { login, pharmacy, isSuperAdmin, user } = useAuth();
+  const { login, pharmacy, isSuperAdmin, user, isLoading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -48,22 +48,24 @@ const LoginPage = () => {
   }, [searchParams]);
 
   useEffect(() => {
-    // If navigation should happen after state commit, do it here
+    // 1. If still loading from AuthContext, just wait
+    if (authLoading) return;
+
+    // 2. We have a user and they're fully loaded
     if (isSuperAdmin) {
       navigate('/admin');
+      setIsLoading(false);
     } else if (pharmacy) {
       navigate('/dashboard');
+      setIsLoading(false);
     } else if (user && !pharmacy && !isSuperAdmin) {
-      // Small delay to allow AuthContext to potentially fetch role
-      const timer = setTimeout(() => {
-        setIsLoading(false);
-        toast.error('No associated pharmacy or admin role found for this user.');
-      }, 1000);
-      return () => clearTimeout(timer);
+      // Finished loading but found no role/pharmacy
+      setIsLoading(false);
+      toast.error('No associated pharmacy or admin role found for this user.');
     } else if (!user) {
       setIsLoading(false);
     }
-  }, [pharmacy, isSuperAdmin, user, navigate]);
+  }, [pharmacy, isSuperAdmin, user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

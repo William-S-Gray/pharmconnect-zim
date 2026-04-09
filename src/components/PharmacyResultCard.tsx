@@ -57,7 +57,10 @@ export function PharmacyResultCard({
   const whatsappNumber = phone.replace(/\s+/g, '').replace(/^0/, '263');
   const whatsappMessage = encodeURIComponent(`Hi ${pharmacyName}, I found you on PharmConnect Zim. Do you have ${drugName} in stock?`);
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`;
+  const hasCoords = lat !== 0 && lng !== 0;
+  const directionsUrl = hasCoords
+    ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+    : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${pharmacyName}, ${suburb}, ${city}`)}`;
 
   const handleRequest = async () => {
     if (!drugId || !pharmacyId) return;

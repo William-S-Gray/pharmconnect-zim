@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Pill, ChevronRight, AlertCircle, Lightbulb, Search } from 'lucide-react';
+import { Brain, Pill, ChevronRight, AlertCircle, Lightbulb, Search, ShieldAlert } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 // ─── Local fallback (used if Supabase symptom_drug_map table not yet seeded) ──
@@ -41,9 +41,14 @@ interface SmartEmptyStateProps {
   onSearchSuggestion?: (suggestion: string) => void;
 }
 
+import { useAuth } from '@/context/AuthContext';
+
 export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: SmartEmptyStateProps) {
+  const { profile } = useAuth();
   const [match, setMatch] = useState<SymptomMatch | null>(null);
   const [loaded, setLoaded] = useState(false);
+  
+  const isSuperAdmin = profile?.global_role === 'super_admin';
 
   useEffect(() => {
     if (!query) { setLoaded(true); return; }
@@ -186,6 +191,19 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
             <p className="text-sm text-foreground">
               Try searching in <strong>Harare</strong> — it has the largest pharmacy network.
             </p>
+          </div>
+        )}
+        {isSuperAdmin && (
+          <div
+            className="rounded-xl p-3.5 flex items-center gap-3 border-dashed border-red-300 bg-red-50 text-red-800"
+          >
+            <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+            <div className="text-left text-xs">
+              <p className="font-bold">ADMIN DIAGNOSTIC</p>
+              <p className="opacity-90">Drugs exist in DB but no approved pharmacies have stock.</p>
+              <p className="mt-1 font-semibold">• Check if your pharmacies are status='APPROVED'</p>
+              <p className="font-semibold">• Verify stock quantity &gt; 0 in pharmacy_stock</p>
+            </div>
           </div>
         )}
       </div>

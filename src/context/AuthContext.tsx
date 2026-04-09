@@ -100,6 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let finalRole: UserRole | null = null;
       let finalPharmacy: Pharmacy | null = null;
 
+      console.log('DEBUG: fetchFullProfile starting for', userId);
       // Wrap the fetch logic in a promise so we can race it against the timeout
       const fetchLogic = async () => {
         // 1. Try RPC first (fast path)
@@ -113,8 +114,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else if (profileData) {
             finalRole = profileData.global_role;
           }
+          console.log('DEBUG: RPC successful', { profileData, finalRole });
         } else {
-          // 2. FALLBACK: sequential fetch
+          console.log('DEBUG: RPC failed or missing, falling back to sequential fetch', rpcError);
           const { data: pData } = await supabase
             .from('profiles')
             .select('*')
@@ -126,7 +128,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else {
             // Profile row missing — auto-create from session metadata
             const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) {
+              console.log('DEBUG: Auth user metadata found:', { 
+                app_role: authUser.app_metadata?.role, 
+                user_role: authUser.user_metadata?.role,
+                email: authUser.email 
+              });
               const isDashboardAdmin = authUser.app_metadata?.role === 'super_admin' || 
                                      authUser.user_metadata?.role === 'super_admin' ||
                                      authUser.email === 'graywilliamwiltino@gmail.com';
@@ -162,6 +168,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       await Promise.race([fetchLogic(), timeoutPromise]);
+      console.log('DEBUG: fetchFullProfile logic complete', { finalRole, hasPharmacy: !!finalPharmacy });
 
       if (!finalRole) {
         console.warn('No role determined for user', userId);

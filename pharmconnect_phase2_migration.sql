@@ -121,6 +121,7 @@ RETURNS TABLE (
   lng           FLOAT8,
   drug_id       UUID,
   drug_name     TEXT,
+  drug_strength TEXT,
   unit_price    NUMERIC,
   quantity      INTEGER,
   stock_status  TEXT,
@@ -166,6 +167,7 @@ BEGIN
     ph.lng                                 AS lng,
     d.id                                   AS drug_id,
     COALESCE(d.common_name, d.generic_name) AS drug_name,
+    d.strength                             AS drug_strength,
     ps.unit_price                          AS unit_price,
     ps.quantity                            AS quantity,
     CASE
@@ -192,16 +194,17 @@ BEGIN
     ph.status = 'APPROVED'
     AND (p_city IS NULL OR LOWER(ph.city) = LOWER(p_city))
     AND (
-      -- Direct drug name match (original query)
-      d.generic_name ILIKE '%' || p_query || '%'
-      OR d.common_name ILIKE '%' || p_query || '%'
+      -- Direct drug name match (handles 'Paracetamol' matching 'Paracetamol 500mg' AND vice versa)
+      (d.generic_name ILIKE '%' || p_query || '%' OR p_query ILIKE '%' || d.generic_name || '%')
+      OR (d.common_name ILIKE '%' || p_query || '%' OR p_query ILIKE '%' || d.common_name || '%')
+      OR (d.strength ILIKE '%' || p_query || '%' OR p_query ILIKE '%' || d.strength || '%')
       OR EXISTS (
         SELECT 1 FROM UNNEST(d.brand_names) bn
-        WHERE bn ILIKE '%' || p_query || '%'
+        WHERE bn ILIKE '%' || p_query || '%' OR p_query ILIKE '%' || bn || '%'
       )
       OR EXISTS (
         SELECT 1 FROM UNNEST(d.search_terms) st
-        WHERE st ILIKE '%' || p_query || '%'
+        WHERE st ILIKE '%' || p_query || '%' OR p_query ILIKE '%' || st || '%'
       )
       -- Symptom-expanded keywords (split by OR)
       OR (v_search <> p_query AND (

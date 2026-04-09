@@ -20,6 +20,8 @@ import { PharmacyMap } from '@/components/PharmacyMap';
 interface SearchResult {
   pharmacy_id: string;
   drug_id: string;
+  drug_name: string;
+  drug_strength?: string;
   pharmacy_name: string;
   suburb: string;
   city: string;
@@ -63,6 +65,8 @@ async function fetchNearbyPharmacies(
     return (data || []).map((item: any): SearchResult => ({
       pharmacy_id:   item.pharmacy_id,
       drug_id:       item.drug_id,
+      drug_name:     item.drug_name,
+      drug_strength: item.drug_strength,
       pharmacy_name: item.pharmacy_name,
       suburb:        item.suburb,
       city:          item.city,
@@ -322,7 +326,7 @@ const SearchResultsPage = () => {
                       quantity={result.quantity}
                       unitPrice={result.unit_price}
                       phone={result.phone}
-                      drugName={drugQuery}
+                      drugName={result.drug_strength ? `${result.drug_name} ${result.drug_strength}` : result.drug_name}
                       isOpenNow={true}
                       isCheapest={result.unit_price === cheapestPrice && cheapestPrice !== Infinity}
                     />
