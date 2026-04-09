@@ -54,7 +54,7 @@ export function PharmacyResultCard({
   const [senderContact, setSenderContact] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const whatsappNumber = phone.replace(/\s+/g, '').replace(/^0/, '263');
+  const whatsappNumber = (phone || '').replace(/\s+/g, '').replace(/^0/, '263');
   const whatsappMessage = encodeURIComponent(`Hi ${pharmacyName}, I found you on PharmConnect Zim. Do you have ${drugName} in stock?`);
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
   const hasCoords = lat !== 0 && lng !== 0;

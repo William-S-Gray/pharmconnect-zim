@@ -158,17 +158,27 @@ const SearchResultsPage = () => {
     );
   }, [drugQuery, cityParam, setSearchParams]);
 
-  const mapMarkers = useMemo(() => results.map(r => ({
-    pharmacy_id:   r.pharmacy_id,
-    pharmacy_name: r.pharmacy_name,
-    lat:           r.lat,
-    lng:           r.lng,
-    suburb:        r.suburb,
-    city:          r.city,
-    stock_status:  r.stock_status,
-    quantity:      r.quantity,
-    unit_price:    r.unit_price,
-  })), [results]);
+  const mapMarkers = useMemo(() => {
+    // Deduplicate by pharmacy_id so we don't have overlapping markers
+    const uniquePharmacies = new Map<string, any>();
+    results.forEach(r => {
+      if (!uniquePharmacies.has(r.pharmacy_id)) {
+        uniquePharmacies.set(r.pharmacy_id, r);
+      }
+    });
+
+    return Array.from(uniquePharmacies.values()).map(r => ({
+      pharmacy_id:   r.pharmacy_id,
+      pharmacy_name: r.pharmacy_name,
+      lat:           r.lat,
+      lng:           r.lng,
+      suburb:        r.suburb,
+      city:          r.city,
+      stock_status:  r.stock_status,
+      quantity:      r.quantity,
+      unit_price:    r.unit_price,
+    }));
+  }, [results]);
 
   if (isError) {
     const msg = (error as Error)?.message || '';
@@ -313,7 +323,7 @@ const SearchResultsPage = () => {
                 <div className={`${viewMode === 'map' ? 'hidden' : 'block'} space-y-3`}>
                   {pagination.paginatedItems.map((result) => (
                     <PharmacyResultCard
-                      key={result.pharmacy_id}
+                      key={`${result.pharmacy_id}-${result.drug_id}`}
                       pharmacyId={result.pharmacy_id}
                       drugId={result.drug_id}
                       pharmacyName={result.pharmacy_name}

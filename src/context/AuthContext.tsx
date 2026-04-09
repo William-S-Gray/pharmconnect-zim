@@ -101,7 +101,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       let finalPharmacy: Pharmacy | null = null;
 
       console.log('DEBUG: fetchFullProfile starting for', userId);
-      // Wrap the fetch logic in a promise so we can race it against the timeout
+
       const fetchLogic = async () => {
         // 1. Try RPC first (fast path)
         const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
@@ -128,6 +128,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           } else {
             // Profile row missing — auto-create from session metadata
             const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
               console.log('DEBUG: Auth user metadata found:', { 
                 app_role: authUser.app_metadata?.role, 
                 user_role: authUser.user_metadata?.role,
@@ -168,11 +169,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       };
 
       await Promise.race([fetchLogic(), timeoutPromise]);
+
+      // --- FINAL OVERRIDE BLOCK ---
+      // Force super_admin if email/metadata matches, even if DB says pharmacy_staff
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const isDesignatedAdmin = authUser.app_metadata?.role === 'super_admin' || 
+                                 authUser.user_metadata?.role === 'super_admin' ||
+                                 authUser.email === 'graywilliamwiltino@gmail.com';
+        
+        if (isDesignatedAdmin) {
+          console.log('DEBUG: Forcing role to super_admin based on metadata/email bypass');
+          finalRole = 'super_admin';
+          // Sync DB in background if it was incorrect
+          if (profileData && profileData.global_role !== 'super_admin') {
+            supabase.from('profiles').update({ global_role: 'super_admin' }).eq('id', userId).then();
+          }
+        }
+      }
+
       console.log('DEBUG: fetchFullProfile logic complete', { finalRole, hasPharmacy: !!finalPharmacy });
 
       if (!finalRole) {
         console.warn('No role determined for user', userId);
-        finalRole = 'pharmacy_staff'; // Final fallback to allow login
+        finalRole = 'pharmacy_staff'; // Final fallback
       }
 
       if (profileData) setProfile(profileData);
