@@ -215,7 +215,7 @@ const SearchResultsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background pb-24 lg:pb-0">
       <Navbar />
 
       <div className="skeu-toolbar border-b py-3 px-4">
@@ -261,46 +261,28 @@ const SearchResultsPage = () => {
 
             <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
               <div>
-                <h1 className="font-heading font-semibold text-lg text-foreground text-emboss">
+                <h1 className="font-heading font-semibold text-lg text-foreground text-emboss pb-0.5">
                   {drugQuery ? `"${drugQuery}"` : 'Search results'} near {cityParam}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {isLoading ? 'Searching…' : `${sorted.length} pharmacy${sorted.length !== 1 ? 'ies' : ''} found`}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-9 btn-skeu-outline gap-1.5"
+                  className="h-10 sm:h-9 btn-skeu-outline gap-1.5 flex-1 sm:flex-none justify-center"
                   onClick={handleDetectLocation}
                 >
-                  <MapIcon className="w-3.5 h-3.5" /> Detect My Location
+                  <MapIcon className="w-4 h-4 sm:w-3.5 sm:h-3.5" /> Detect Location
                 </Button>
-                <div className="flex bg-muted p-1 rounded-lg mr-2 lg:hidden">
-                  <Button
-                    variant={viewMode === 'list' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('list')}
-                    className="h-8"
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant={viewMode === 'map' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => setViewMode('map')}
-                    className="h-8"
-                  >
-                    <MapIcon className="w-4 h-4" />
-                  </Button>
-                </div>
                 <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
-                  <SelectTrigger className="w-36 h-9 btn-skeu-outline">
+                  <SelectTrigger className="w-[140px] h-10 sm:h-9 btn-skeu-outline">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="stock">Best availability</SelectItem>
+                    <SelectItem value="stock">Best available</SelectItem>
                     <SelectItem value="nearest">Nearest first</SelectItem>
                     <SelectItem value="price">Lowest price</SelectItem>
                   </SelectContent>
@@ -390,6 +372,23 @@ const SearchResultsPage = () => {
 
         </div>
       </div>
+
+      {/* Mobile Sticky Toggle Pill */}
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 lg:hidden shadow-xl rounded-full bg-slate-900 border border-slate-700/50 flex items-center p-1.5 backdrop-blur-md">
+        <button
+          onClick={() => setViewMode('list')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-colors duration-200 ${viewMode === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'}`}
+        >
+          <List className="w-4 h-4" /> List
+        </button>
+        <button
+          onClick={() => setViewMode('map')}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-colors duration-200 ${viewMode === 'map' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white'}`}
+        >
+          <MapIcon className="w-4 h-4" /> Map
+        </button>
+      </div>
+
     </div>
   );
 };

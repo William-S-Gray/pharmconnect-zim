@@ -42,11 +42,14 @@ interface SmartEmptyStateProps {
 }
 
 import { useAuth } from '@/context/AuthContext';
+import { RequestDrugModal } from '@/components/RequestDrugModal';
 
 export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: SmartEmptyStateProps) {
   const { profile } = useAuth();
   const [match, setMatch] = useState<SymptomMatch | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+
   
   const isSuperAdmin = profile?.global_role === 'super_admin';
 
@@ -148,9 +151,27 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
           </div>
         )}
 
+        <div className="w-full max-w-lg mt-5 rounded-2xl p-4 border border-dashed border-border flex flex-col items-center justify-center text-center gap-3">
+           <p className="text-sm text-muted-foreground">
+             Still didn't find what you're looking for?
+           </p>
+           <button
+             onClick={() => setIsRequestModalOpen(true)}
+             className="text-sm font-medium text-primary hover:underline"
+           >
+             Request a specific drug
+           </button>
+        </div>
+
         <p className="text-xs text-muted-foreground mt-4 text-center max-w-sm">
           Always consult a qualified pharmacist or doctor before taking any medication.
         </p>
+        <RequestDrugModal 
+          isOpen={isRequestModalOpen} 
+          onClose={() => setIsRequestModalOpen(false)} 
+          initialQuery={query}
+          city={city}
+        />
       </div>
     );
   }
@@ -207,6 +228,25 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
           </div>
         )}
       </div>
+
+      <div className="mt-8 pt-6 border-t border-border w-full max-w-sm flex flex-col items-center">
+        <p className="text-sm text-muted-foreground mb-3 text-balance">
+          Can't find a specific medicine? Let our partner pharmacies know so they can restock.
+        </p>
+        <button
+          onClick={() => setIsRequestModalOpen(true)}
+          className="h-10 px-5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+        >
+          Request this Medicine
+        </button>
+      </div>
+
+      <RequestDrugModal 
+        isOpen={isRequestModalOpen} 
+        onClose={() => setIsRequestModalOpen(false)} 
+        initialQuery={query}
+        city={city}
+      />
     </div>
   );
 }
