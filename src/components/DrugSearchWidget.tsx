@@ -80,17 +80,17 @@ function ResultRow({ result, isCheapest, isSelected, onClick }: ResultRowProps) 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-all hover:scale-[1.01] active:scale-[0.99]"
+      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-all hover:scale-[1.01] active:scale-[0.99] ${
+        isSelected 
+          ? 'bg-primary/10 dark:bg-primary/20 border-primary shadow-[0_0_0_2px_hsl(var(--primary)/0.3)]' 
+          : isCheapest 
+          ? 'border-[#ffb700] dark:border-[#d99b00] shadow-[0_0_0_2px_rgba(255,183,0,0.2)]' 
+          : 'border-border shadow-sm'
+      }`}
       style={{
-        background: isSelected
-          ? 'linear-gradient(180deg, hsl(174 50% 95%) 0%, hsl(174 40% 92%) 100%)'
-          : 'linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted)/0.3) 100%)',
-        borderColor: isSelected ? 'hsl(174 70% 55%)' : isCheapest ? 'hsl(45 90% 50%)' : 'hsl(var(--border))',
-        boxShadow: isSelected
-          ? '0 0 0 2px hsl(174 70% 55% / 0.3)'
-          : isCheapest
-          ? '0 0 0 2px hsl(45 90% 50% / 0.2)'
-          : 'var(--shadow-card)',
+        background: isSelected 
+          ? undefined 
+          : 'linear-gradient(180deg, hsl(var(--card)) 0%, hsl(var(--muted)/0.3) 100%)'
       }}
     >
       {/* Status dot */}
@@ -242,14 +242,16 @@ export function DrugSearchWidget({
           style={{ boxShadow: 'var(--shadow-card)' }}
         />
         {/* Location indicator */}
-        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center">
+        <div 
+          className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center"
+          title={geo.isFallback ? `Location unavailable — showing Harare` : 'Using your location'}
+        >
           {geo.loading ? (
             <Loader2 className="w-3.5 h-3.5 text-muted-foreground animate-spin" />
           ) : (
             <MapPin
               className="w-3.5 h-3.5"
               style={{ color: geo.isFallback ? 'hsl(45 90% 50%)' : 'hsl(142 70% 45%)' }}
-              title={geo.isFallback ? `Location unavailable — showing Harare` : 'Using your location'}
             />
           )}
         </div>

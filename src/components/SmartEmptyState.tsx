@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Brain, Pill, ChevronRight, AlertCircle, Lightbulb, Search, ShieldAlert } from 'lucide-react';
+import { Brain, Pill, ChevronRight, AlertCircle, Lightbulb, Search, ShieldAlert, LineChart } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 
 // ─── Local fallback (used if Supabase symptom_drug_map table not yet seeded) ──
@@ -19,6 +19,11 @@ const LOCAL_SYMPTOM_MAP: Record<string, { drugs: string[]; tip: string; emoji: s
   'cholesterol':      { drugs: ['Atorvastatin', 'Simvastatin'],                  tip: 'Statins require a prescription and regular liver function monitoring.',       emoji: '💊' },
   'cold':             { drugs: ['Cetirizine', 'Bromhexine', 'Paracetamol'],      tip: 'Cold symptoms usually resolve within 7–10 days without antibiotics.',        emoji: '🤧' },
   'flu':              { drugs: ['Paracetamol', 'Cetirizine', 'Amoxicillin'],     tip: 'Rest and fluids are key. Paracetamol relieves aches and fever.',             emoji: '🤧' },
+  'back':             { drugs: ['Ibuprofen', 'Diclofenac', 'Paracetamol'],       tip: 'If back pain is severe or accompanied by leg numbness, see a doctor immediately.', emoji: '💥' },
+  'period':           { drugs: ['Ibuprofen', 'Paracetamol', 'Diclofenac'],       tip: 'NSAIDs like Ibuprofen are effective for menstrual cramps. A warm compress can also help.', emoji: '🩸' },
+  'cramp':            { drugs: ['Ibuprofen', 'Paracetamol'],                     tip: 'For severe or persistent cramps, stay hydrated and consult a healthcare provider.', emoji: '😣' },
+  'ear':              { drugs: ['Paracetamol', 'Ibuprofen'],                     tip: 'Ear leaks or infections require medical diagnosis. Do not insert objects into the ear.', emoji: '👂' },
+  'tooth':            { drugs: ['Ibuprofen', 'Paracetamol', 'Metronidazole'],    tip: 'See a dentist for toothaches; painkillers only offer temporary relief.', emoji: '🦷' },
 };
 
 function matchLocal(query: string): { drugs: string[]; tip: string; emoji: string } | null {
@@ -39,6 +44,18 @@ interface SmartEmptyStateProps {
   query: string;
   city?: string;
   onSearchSuggestion?: (suggestion: string) => void;
+}
+
+function isConversational(query: string): boolean {
+  const q = query.toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  if (words.length >= 4) return true;
+  
+  const conversationalPhrases = [
+    'i have', 'am having', 'my', 'hurting', 'hurts', 'pain', 'feeling', 'feel',
+    'leaking', 'ache', 'aching', 'how to', 'what is', 'is there', 'can i'
+  ];
+  return conversationalPhrases.some(phrase => q.includes(phrase));
 }
 
 import { useAuth } from '@/context/AuthContext';
@@ -138,16 +155,9 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
         </div>
 
         {match.tip && (
-          <div
-            className="w-full max-w-lg rounded-xl p-4 flex gap-3"
-            style={{
-              background: 'linear-gradient(180deg, hsl(45 100% 97%) 0%, hsl(45 80% 94%) 100%)',
-              border: '1px solid hsl(45 70% 82%)',
-              boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.7)',
-            }}
-          >
-            <Lightbulb className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-800 leading-relaxed">{match.tip}</p>
+          <div className="w-full max-w-lg rounded-xl p-4 flex gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40">
+            <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800 dark:text-amber-200 leading-relaxed">{match.tip}</p>
           </div>
         )}
 
@@ -176,23 +186,73 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
     );
   }
 
+  if (!match && isConversational(query)) {
+    return (
+      <div className="flex flex-col items-center py-8 px-4 text-center animate-fade-in w-full max-w-lg mx-auto">
+        <div className="w-16 h-16 rounded-2xl bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mb-5 text-4xl shadow-sm border border-blue-100 dark:border-blue-900/50">
+          🩺
+        </div>
+        <h2 className="font-heading font-semibold text-xl text-foreground mb-2">Let's find the right care for you</h2>
+        <p className="text-sm text-muted-foreground mb-6">
+          It sounds like you're describing how you feel. To help you better, please try using a simpler symptom keyword or drug name.
+        </p>
+
+        <div className="w-full bg-secondary/30 dark:bg-secondary/20 border border-secondary/50 dark:border-secondary/30 rounded-xl p-4 text-left shadow-sm">
+           <p className="text-sm font-medium mb-3 text-foreground">Common keywords to try:</p>
+           <div className="flex flex-wrap gap-2">
+             {['pain', 'fever', 'cold', 'stomach', 'cough', 'running stomach', 'headache'].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onSearchSuggestion?.(s)}
+                  className="px-3 py-1.5 rounded-lg bg-background border border-border text-sm hover:border-primary transition-colors text-foreground shadow-sm"
+                >
+                  {s}
+                </button>
+             ))}
+           </div>
+        </div>
+
+        <div className="mt-6 w-full rounded-xl p-4 flex gap-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40">
+          <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-500 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-amber-900 dark:text-amber-200 text-left">
+            <span className="font-semibold block mb-0.5">Medical Advice</span>
+            PharmConnect cannot provide medical diagnoses. Please consult a doctor or visit a nearby pharmacy if your symptoms are severe or persistent.
+          </div>
+        </div>
+        
+        <div className="mt-8 pt-6 border-t border-border w-full flex flex-col items-center">
+          <p className="text-sm text-muted-foreground mb-3 text-balance">
+            Know the exact medicine you need?
+          </p>
+          <button
+            onClick={() => setIsRequestModalOpen(true)}
+            className="h-10 px-5 rounded-lg bg-secondary text-secondary-foreground text-sm font-medium hover:bg-secondary/80 transition-colors"
+          >
+            Request a specific drug
+          </button>
+        </div>
+
+        <RequestDrugModal 
+          isOpen={isRequestModalOpen} 
+          onClose={() => setIsRequestModalOpen(false)} 
+          initialQuery={query}
+          city={city}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center py-10 px-4 text-center animate-fade-in">
-      <div
-        className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5"
-        style={{ background: 'linear-gradient(180deg, hsl(var(--muted)) 0%, hsl(var(--muted)/0.5) 100%)', boxShadow: 'var(--shadow-card)' }}
-      >
-        <Search className="w-7 h-7 text-muted-foreground" />
+      <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-5 bg-secondary/30 dark:bg-secondary/20 shadow-sm border border-secondary/50 dark:border-secondary/30">
+        <LineChart className="w-7 h-7 text-muted-foreground" />
       </div>
-      <h2 className="font-heading font-semibold text-xl text-foreground mb-2">No results for "{query}"</h2>
+      <h2 className="font-heading font-semibold text-xl text-foreground mb-2">Item not recognized</h2>
       <p className="text-sm text-muted-foreground mb-6 max-w-sm">
-        We couldn't find <strong className="text-foreground">"{query}"</strong> near {city}. It might be a brand name or a spelling variation.
+        We ran an analysis but couldn't find a medicine or symptom matching <strong className="text-foreground">"{query}"</strong> in our system yet.
       </p>
       <div className="space-y-2 w-full max-w-sm">
-        <div
-          className="rounded-xl p-4 text-left flex gap-3"
-          style={{ background: 'linear-gradient(180deg, hsl(210 25% 97%) 0%, hsl(210 20% 94%) 100%)', border: '1px solid hsl(214 20% 85%)' }}
-        >
+        <div className="rounded-xl p-4 text-left flex gap-3 bg-secondary/30 dark:bg-secondary/20 border border-secondary/50 dark:border-secondary/30">
           <Brain className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
           <div className="text-sm">
             <p className="font-medium text-foreground mb-1">Try these tips:</p>
@@ -204,10 +264,7 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
           </div>
         </div>
         {city && city !== 'Harare' && (
-          <div
-            className="rounded-xl p-3.5 flex items-center gap-3"
-            style={{ background: 'linear-gradient(180deg, hsl(174 40% 97%) 0%, hsl(174 30% 94%) 100%)', border: '1px solid hsl(174 30% 83%)' }}
-          >
+          <div className="rounded-xl p-3.5 flex items-center gap-3 bg-primary/5 dark:bg-primary/10 border border-primary/20 dark:border-primary/30">
             <AlertCircle className="w-4 h-4 text-primary flex-shrink-0" />
             <p className="text-sm text-foreground">
               Try searching in <strong>Harare</strong> — it has the largest pharmacy network.
