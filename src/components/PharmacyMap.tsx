@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, Marker, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, InfoWindow } from '@react-google-maps/api';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
 import { useSearchStore } from '@/stores/searchStore';
@@ -118,7 +118,7 @@ export function PharmacyMap({
     >
       {/* User location dot */}
       {userLocation && (
-        <Marker
+        <MarkerF
           position={userLocation}
           icon={{
             url: 'https://maps.google.com/mapfiles/ms/icons/blue-dot.png',
@@ -132,7 +132,7 @@ export function PharmacyMap({
         const isCheapest = cheapestPharmacyId === marker.pharmacy_id;
         const isSelected = selected?.pharmacy_id === marker.pharmacy_id;
         return (
-          <Marker
+          <MarkerF
             key={marker.pharmacy_id}
             position={{ lat: marker.lat, lng: marker.lng }}
             icon={{

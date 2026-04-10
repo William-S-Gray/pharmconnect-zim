@@ -7,6 +7,7 @@ import { useDebounce } from '@/hooks/use-debounce';
 import { useGeolocation, HARARE_FALLBACK } from '@/hooks/use-geolocation';
 import { type StockStatus } from '@/components/StockStatusBadge';
 import { SmartEmptyState } from '@/components/SmartEmptyState';
+import { GuidedRecovery } from '@/components/GuidedRecovery';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 export interface DrugSearchResult {
@@ -78,9 +79,9 @@ function ResultRow({ result, isCheapest, isSelected, onClick }: ResultRowProps) 
   };
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border transition-all hover:scale-[1.01] active:scale-[0.99] ${
+      className={`w-full text-left flex flex-wrap items-start gap-3 p-3 rounded-xl border transition-all hover:scale-[1.01] active:scale-[0.99] cursor-pointer ${
         isSelected 
           ? 'bg-primary/10 dark:bg-primary/20 border-primary shadow-[0_0_0_2px_hsl(var(--primary)/0.3)]' 
           : isCheapest 
@@ -131,7 +132,27 @@ function ResultRow({ result, isCheapest, isSelected, onClick }: ResultRowProps) 
           {result.stock_status === 'IN_STOCK' ? 'In stock' : result.stock_status === 'LOW_STOCK' ? 'Low' : 'Out'}
         </p>
       </div>
-    </button>
+      
+      {isSelected && (
+        <div className="w-full flex justify-between mt-2 pt-2 border-t border-border/50 items-center col-span-full" style={{ gridColumn: '1 / -1' }}>
+          <a 
+            href={`https://www.google.com/maps/dir/?api=1&destination=${result.lat},${result.lng}`} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            onClick={(e) => e.stopPropagation()}
+            className="text-xs font-medium text-primary hover:underline bg-primary/5 px-3 py-1.5 rounded-lg border border-primary/20"
+          >
+            Get Directions
+          </a>
+          <button 
+            onClick={(e) => { e.stopPropagation(); /* Hook up reservation logic later */ }} 
+            className="text-xs font-medium bg-secondary text-secondary-foreground px-3 py-1.5 rounded-lg hover:bg-secondary/90 transition-colors"
+          >
+            Reserve Drug
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -150,6 +171,7 @@ export function DrugSearchWidget({
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [intent, setIntent] = useState<'DRUG' | 'SYMPTOM_CLEAR' | 'SYMPTOM_COMPLEX' | 'UNKNOWN' | null>(null);
 
   const debouncedQuery = useDebounce(query, 300);
   const geo = useGeolocation();
@@ -175,6 +197,25 @@ export function DrugSearchWidget({
     setSearched(true);
 
     try {
+      // 1. Detect Intent
+      let currentIntent = 'UNKNOWN';
+      const { data: intentData, error: intentError } = await supabase.rpc('detect_search_intent', { p_query: q.trim() });
+      if (!intentError && intentData && intentData.intent) {
+        currentIntent = intentData.intent;
+      }
+      setIntent(currentIntent as any);
+
+      if (['SYMPTOM_COMPLEX', 'UNKNOWN'].includes(currentIntent)) {
+        // Log it silently
+        supabase.rpc('log_smart_search', { p_query: q.trim(), p_intent: currentIntent, p_city: city || '' }).then();
+        // Do not search for pharmacies if complex
+        setResults([]);
+        onResultsChange?.([]);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Fetch Pharmacies for DRUG or SYMPTOM_CLEAR
       const { data, error: rpcError } = await supabase.rpc('find_nearby_pharmacies', {
         p_query:     q.trim(),
         p_lat:       userLat,
@@ -200,6 +241,11 @@ export function DrugSearchWidget({
         stock_status:  row.stock_status as StockStatus,
         distance_km:   row.distance_km,
       }));
+
+      if (mapped.length === 0) {
+        // Log zero results
+        supabase.rpc('log_smart_search', { p_query: q.trim(), p_intent: 'ZERO_RESULTS', p_city: city || '' }).then();
+      }
 
       setResults(mapped);
       onResultsChange?.(mapped);
@@ -278,9 +324,9 @@ export function DrugSearchWidget({
 
       {/* Results */}
       {!loading && !error && results.length > 0 && (
-        <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-0.5" style={{ scrollbarWidth: 'thin' }}>
+        <div className="max-h-[500px] overflow-y-auto pr-0.5" style={{ scrollbarWidth: 'thin' }}>
           {/* Summary bar */}
-          <div className="flex items-center justify-between px-0.5 py-1">
+          <div className="flex items-center justify-between px-0.5 py-2 mb-2 sticky top-0 bg-background/95 backdrop-blur z-10 w-full mb-1">
             <span className="text-xs text-muted-foreground">
               {results.length} result{results.length !== 1 ? 's' : ''}
             </span>
@@ -290,21 +336,32 @@ export function DrugSearchWidget({
               </span>
             )}
           </div>
-
-          {results.map(r => (
-            <ResultRow
-              key={`${r.pharmacy_id}-${r.drug_id}`}
-              result={r}
-              isCheapest={highlightCheapest && r.unit_price === cheapestPrice && cheapestPrice != null}
-              isSelected={selectedId === r.pharmacy_id}
-              onClick={() => handleSelect(r)}
-            />
-          ))}
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pb-2">
+            {results.map(r => (
+              <ResultRow
+                key={`${r.pharmacy_id}-${r.drug_id}`}
+                result={r}
+                isCheapest={highlightCheapest && r.unit_price === cheapestPrice && cheapestPrice != null}
+                isSelected={selectedId === r.pharmacy_id}
+                onClick={() => handleSelect(r)}
+              />
+            ))}
+          </div>
         </div>
       )}
 
+
+      {/* Guided Recovery for Complex/Unknown Intent */}
+      {!loading && !error && searched && ['SYMPTOM_COMPLEX', 'UNKNOWN'].includes(intent || '') && !compact && (
+        <GuidedRecovery 
+          query={query} 
+          onSuggestionSelect={(suggestion) => setQuery(suggestion)} 
+        />
+      )}
+
       {/* Empty / Smart state */}
-      {!loading && !error && searched && results.length === 0 && !compact && (
+      {!loading && !error && searched && results.length === 0 && !['SYMPTOM_COMPLEX', 'UNKNOWN'].includes(intent || '') && !compact && (
         <SmartEmptyState
           query={query}
           city={city}
