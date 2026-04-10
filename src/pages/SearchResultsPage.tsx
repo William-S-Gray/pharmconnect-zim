@@ -57,11 +57,6 @@ async function fetchNearbyPharmacies(
     clearTimeout(timeout);
     if (error) throw new Error(error.message);
 
-    supabase
-      .from('drug_searches')
-      .insert([{ query: drugQuery, city, result_count: (data || []).length }])
-      .then(({ error: e }) => { if (e) console.warn('Analytics:', e.message); });
-
     return (data || []).map((item: any): SearchResult => ({
       pharmacy_id:   item.pharmacy_id,
       drug_id:       item.drug_id,
@@ -70,7 +65,7 @@ async function fetchNearbyPharmacies(
       pharmacy_name: item.pharmacy_name,
       suburb:        item.suburb,
       city:          item.city,
-      phone:         item.phone,
+      phone:         item.phone ?? '',
       lat:           item.lat ?? item.latitude ?? 0,
       lng:           item.lng ?? item.longitude ?? 0,
       quantity:      item.quantity,
@@ -303,9 +298,9 @@ const SearchResultsPage = () => {
             ) : (
               <ErrorBoundary section="search results">
                 <div className={`${viewMode === 'map' ? 'hidden' : 'block'} space-y-3`}>
-                  {pagination.paginatedItems.map((result) => (
+                  {pagination.paginatedItems.map((result, index) => (
                     <PharmacyResultCard
-                      key={`${result.pharmacy_id}-${result.drug_id}`}
+                      key={`${result.pharmacy_id}-${result.drug_id ?? result.drug_name}-${index}`}
                       pharmacyId={result.pharmacy_id}
                       drugId={result.drug_id}
                       pharmacyName={result.pharmacy_name}
@@ -319,7 +314,7 @@ const SearchResultsPage = () => {
                       unitPrice={result.unit_price}
                       phone={result.phone}
                       drugName={result.drug_strength ? `${result.drug_name} ${result.drug_strength}` : result.drug_name}
-                      isOpenNow={true}
+                      isOpenNow={false}
                       isCheapest={result.unit_price === cheapestPrice && cheapestPrice !== Infinity}
                     />
                   ))}
@@ -338,7 +333,7 @@ const SearchResultsPage = () => {
             {viewMode === 'map' && (
               <div className="h-[500px] lg:hidden mb-6 skeu-inset overflow-hidden">
                 <ErrorBoundary section="map">
-                  <PharmacyMap markers={mapMarkers} />
+                  <PharmacyMap key={drugQuery} markers={mapMarkers} />
                 </ErrorBoundary>
               </div>
             )}
@@ -351,7 +346,7 @@ const SearchResultsPage = () => {
             >
               <div className="h-72 skeu-inset overflow-hidden border rounded-xl flex-shrink-0">
                 <ErrorBoundary section="map">
-                  <PharmacyMap markers={mapMarkers} />
+                  <PharmacyMap key={drugQuery} markers={mapMarkers} />
                 </ErrorBoundary>
               </div>
               {drugQuery && (

@@ -27,6 +27,7 @@ export function ReserveDrugModal({
 }: ReserveDrugModalProps) {
   const [step, setStep] = useState<ModalStep>('form');
   const [referenceCode, setReferenceCode] = useState('');
+  const [reservedUntil, setReservedUntil] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
   const [patientName, setPatientName] = useState('');
@@ -76,12 +77,21 @@ export function ReserveDrugModal({
           quantity,
           unit_price:    unitPrice ?? null,
         }])
-        .select('reference_code')
+        .select('reference_code, reserved_until')
         .single();
 
       if (error) throw error;
 
       setReferenceCode(data?.reference_code || 'RX-??????');
+      
+      if (data?.reserved_until) {
+        const d = new Date(data.reserved_until);
+        setReservedUntil(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase());
+      } else {
+        const d = new Date(Date.now() + 3 * 60 * 60 * 1000);
+        setReservedUntil(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }).toLowerCase());
+      }
+      
       setStep('success');
     } catch (err: any) {
       console.error('Reservation error:', err);
@@ -98,6 +108,7 @@ export function ReserveDrugModal({
     setNameError('');
     setPhoneError('');
     setReferenceCode('');
+    setReservedUntil('');
     setErrorMsg('');
     onClose();
   };
@@ -253,6 +264,11 @@ export function ReserveDrugModal({
                   <Hash className="w-4 h-4 text-primary" />
                   <span className="font-mono font-bold text-lg text-foreground tracking-widest">{referenceCode}</span>
                 </div>
+                {reservedUntil && (
+                  <p className="text-sm font-medium text-primary mt-2">
+                    Reserved until {reservedUntil}
+                  </p>
+                )}
                 <p className="text-xs text-muted-foreground mt-1">Quote this code when calling the pharmacy.</p>
               </div>
               <Button className="w-full" onClick={handleClose}>Done</Button>

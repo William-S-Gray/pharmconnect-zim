@@ -1,0 +1,252 @@
+import { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Search, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ExportDropdown } from '@/components/ExportDropdown';
+import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
+import { toast } from 'sonner';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { supabase } from '@/lib/supabaseClient';
+import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { usePagination } from '@/hooks/use-pagination';
+import { PaginationControls } from '@/components/PaginationControls';
+
+interface Drug {
+  id: string;
+  common_name: string;
+  generic_name: string;
+  category: string;
+  form: string;
+  strength: string;
+}
+
+const categories = ['Analgesic', 'Antibiotic', 'Antidiabetic', 'Antihypertensive', 'Antifungal', 'Antihistamine', 'GI', 'Cardiovascular', 'Other'];
+const dosageForms = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Cream', 'Ointment', 'Drops', 'Suspension'];
+
+type DrugForm = Omit<Drug, 'id'>;
+const emptyDrug: DrugForm = { common_name: '', generic_name: '', category: '', form: '', strength: '' };
+
+const AdminDrugsPage = () => {
+  const queryClient = useQueryClient();
+  const [search, setSearch] = useState('');
+  const [catFilter, setCatFilter] = useState('ALL');
+  const [showEditor, setShowEditor] = useState(false);
+  const [editingDrug, setEditingDrug] = useState<Drug | null>(null);
+  const [form, setForm] = useState<DrugForm>(emptyDrug);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  const { data: drugs = [], isLoading } = useQuery<Drug[]>({
+    queryKey: ['admin', 'drugs', catFilter],
+    queryFn: async () => {
+      let query = supabase
+        .from('drugs')
+        .select('*');
+      
+      if (catFilter !== 'ALL') query = query.eq('category', catFilter);
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as Drug[];
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: { id?: string; drug: DrugForm }) => {
+      if (data.id) {
+        const { error } = await supabase
+          .from('drugs')
+          .update(data.drug)
+          .eq('id', data.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase
+        .from('drugs')
+        .insert([data.drug]);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
+      toast.success(vars.id ? 'Drug updated' : 'Drug added to database');
+      setShowEditor(false);
+    },
+    onError: (error: any) => toast.error(error.message || 'Failed to save drug'),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('drugs')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
+      toast.success('Drug removed from database');
+      setShowDeleteConfirm(null);
+    },
+    onError: (error: any) => toast.error(error.message || 'Failed to delete drug'),
+  });
+
+  const openAdd = () => { setEditingDrug(null); setForm(emptyDrug); setShowEditor(true); };
+  const openEdit = (drug: Drug) => {
+    setEditingDrug(drug);
+    setForm({ common_name: drug.common_name, generic_name: drug.generic_name, category: drug.category, form: drug.form, strength: drug.strength });
+    setShowEditor(true);
+  };
+
+  const handleSave = () => {
+    if (!form.common_name || !form.generic_name || !form.category || !form.form) {
+      toast.error('Please fill all required fields'); return;
+    }
+    saveMutation.mutate({ id: editingDrug?.id, drug: form });
+  };
+
+  const filtered = drugs.filter(d => {
+    return !search || d.common_name.toLowerCase().includes(search.toLowerCase()) || d.generic_name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const pagination = usePagination(filtered, { defaultPageSize: 20 });
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="font-heading font-bold text-2xl text-foreground text-emboss">Drug Database</h1>
+          <p className="text-muted-foreground text-sm">{drugs.length} drugs in master database</p>
+        </div>
+        <div className="flex gap-2">
+          <ExportDropdown
+            disabled={!filtered.length}
+            onCSV={() => exportCSV(filtered.map(d => ({ Name: d.common_name, 'Generic Name': d.generic_name, Category: d.category, Form: d.form, Strength: d.strength })), 'drug-database')}
+            onExcel={() => exportExcel(filtered.map(d => ({ Name: d.common_name, 'Generic Name': d.generic_name, Category: d.category, Form: d.form, Strength: d.strength })), 'drug-database', 'Drugs')}
+          />
+          <Button onClick={openAdd} className="gap-2"><Plus className="w-4 h-4" /> Add Drug</Button>
+        </div>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Search drugs..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
+        </div>
+        <Select value={catFilter} onValueChange={setCatFilter}>
+          <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Categories</SelectItem>
+            {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {isLoading ? (
+        <div className="py-8"><LoadingSpinner size="lg" label="Loading drugs..." /></div>
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 font-medium text-muted-foreground">Brand Name</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">Generic Name</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden sm:table-cell">Category</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Form</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground hidden md:table-cell">Strength</th>
+                    <th className="text-right p-3 font-medium text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+              <tbody>
+                  {pagination.paginatedItems.map((d) => (
+                    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="p-3 font-medium text-foreground">{d.common_name}</td>
+                      <td className="p-3 text-muted-foreground">{d.generic_name}</td>
+                      <td className="p-3 hidden sm:table-cell"><Badge variant="outline" className="text-xs">{d.category}</Badge></td>
+                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.form}</td>
+                      <td className="p-3 text-muted-foreground hidden md:table-cell">{d.strength}</td>
+                      <td className="p-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button size="icon" variant="ghost" onClick={() => openEdit(d)}><Pencil className="w-3.5 h-3.5" /></Button>
+                          <Button size="icon" variant="ghost" className="text-destructive" onClick={() => setShowDeleteConfirm(d.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filtered.length === 0 && <p className="p-8 text-center text-muted-foreground">No drugs found.</p>}
+            </div>
+            <div className="px-3 pb-3">
+              <PaginationControls
+                page={pagination.page} totalPages={pagination.totalPages}
+                canPrev={pagination.canPrev} canNext={pagination.canNext}
+                onPrev={pagination.prevPage} onNext={pagination.nextPage}
+                onPageChange={pagination.setPage}
+                startIndex={pagination.startIndex} endIndex={pagination.endIndex}
+                totalItems={pagination.totalItems}
+                pageSize={pagination.pageSize} onPageSizeChange={pagination.setPageSize}
+                pageSizeOptions={[10, 20, 50, 100]}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Add/Edit Dialog */}
+      <Dialog open={showEditor} onOpenChange={setShowEditor}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{editingDrug ? 'Edit Drug' : 'Add New Drug'}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2"><Label>Common Name *</Label><Input value={form.common_name} onChange={(e) => setForm(f => ({ ...f, common_name: e.target.value }))} /></div>
+              <div className="space-y-2"><Label>Generic Name *</Label><Input value={form.generic_name} onChange={(e) => setForm(f => ({ ...f, generic_name: e.target.value }))} /></div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label>Category *</Label>
+                <Select value={form.category} onValueChange={(v) => setForm(f => ({ ...f, category: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>{categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Form *</Label>
+                <Select value={form.form} onValueChange={(v) => setForm(f => ({ ...f, form: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>{dosageForms.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Strength</Label><Input value={form.strength} onChange={(e) => setForm(f => ({ ...f, strength: e.target.value }))} placeholder="e.g. 500mg" /></div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditor(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saveMutation.isPending}>{saveMutation.isPending ? 'Saving...' : editingDrug ? 'Update' : 'Add Drug'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <Dialog open={!!showDeleteConfirm} onOpenChange={() => setShowDeleteConfirm(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Delete Drug</DialogTitle></DialogHeader>
+          <p className="text-sm text-muted-foreground">Are you sure? This will remove the drug from the master database. Pharmacies with this drug in their stock will be affected.</p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>Cancel</Button>
+            <Button variant="destructive" disabled={deleteMutation.isPending} onClick={() => showDeleteConfirm && deleteMutation.mutate(showDeleteConfirm)}>
+              {deleteMutation.isPending ? 'Deleting...' : 'Delete'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default AdminDrugsPage;
