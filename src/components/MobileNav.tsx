@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import {
   Sheet,
   SheetContent,
@@ -11,6 +12,8 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+
+import { useAuth } from '@/context/AuthContext';
 
 interface NavItem {
   label: string;
@@ -39,6 +42,7 @@ export function MobileNav({
   adminContext = false
 }: MobileNavProps) {
   const location = useLocation();
+  const { profile } = useAuth();
 
   return (
     <header className="md:hidden sticky top-0 z-50 w-full border-b border-border bg-background/80 backdrop-blur-md">
@@ -56,7 +60,9 @@ export function MobileNav({
           </div>
         </Link>
 
-        <Sheet>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Sheet>
           <SheetTrigger asChild>
             <Button variant="ghost" size="icon" className="relative h-9 w-9 p-0 hover:bg-muted/50 rounded-full">
               <Menu className="h-5 w-5" />
@@ -69,15 +75,24 @@ export function MobileNav({
           <SheetContent side="right" className="flex flex-col w-[300px] sm:w-[350px] p-0 border-l border-border glass-panel">
             <SheetHeader className="p-6 border-b border-border text-left">
               <SheetTitle>
-                <div className="flex flex-col gap-1">
-                  <p className="font-heading font-semibold text-base truncate text-foreground">{pharmacyName || 'Pharmacy'}</p>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className={cn(
-                      "text-[10px] px-2 py-0 h-4 border-none",
-                      adminContext ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
-                    )}>
-                      {role?.replace('_', ' ').toUpperCase() || 'USER'}
-                    </Badge>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full border border-border overflow-hidden bg-muted flex items-center justify-center shrink-0">
+                    {profile?.avatar_url ? (
+                      <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="font-heading font-semibold text-sm truncate text-foreground">{profile?.full_name || 'User'}</p>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className={cn(
+                        "text-[9px] px-1.5 py-0 h-4 border-none font-bold",
+                        adminContext ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"
+                      )}>
+                        {role?.replace('_', ' ').toUpperCase() || 'USER'}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
               </SheetTitle>
@@ -135,6 +150,7 @@ export function MobileNav({
           </SheetContent>
         </Sheet>
       </div>
+    </div>
     </header>
   );
 }

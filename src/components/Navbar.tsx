@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Pill, Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { useState } from 'react';
 
 export function Navbar() {
@@ -25,6 +26,7 @@ export function Navbar() {
 
         {/* Desktop */}
         <div className="hidden md:flex items-center gap-3">
+          <NotificationBell />
           <ThemeToggle />
           <Button variant="outline" asChild>
             <Link to="/pharmacy/register">List Your Pharmacy</Link>
@@ -36,6 +38,7 @@ export function Navbar() {
 
         {/* Mobile toggle */}
         <div className="flex md:hidden items-center gap-1">
+          <NotificationBell />
           <ThemeToggle />
           <button className="p-2 rounded-lg hover:bg-muted/60 transition-colors" onClick={() => setMobileOpen(!mobileOpen)}>
             {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}

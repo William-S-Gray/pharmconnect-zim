@@ -7,6 +7,8 @@ import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 const PharmacyDashboard = () => {
   const { pharmacy, profile, role } = useAuth();
@@ -43,7 +45,16 @@ const PharmacyDashboard = () => {
         // 2. Low Stock Items
         supabase
           .from('pharmacy_stock')
-          .select('quantity, threshold')
+          .select(`
+            quantity, 
+            threshold,
+            drugs!drug_id (
+              generic_name,
+              common_name,
+              strength,
+              form
+            )
+          `)
           .eq('pharmacy_id', pharmacy.id),
 
         // 3. System-wide Trending Searches
@@ -83,7 +94,16 @@ const PharmacyDashboard = () => {
         stock: { total: totalCount, low_stock: lowStockCount },
         plan_tier: pharmacy.plan_tier,
         top_searched_drugs: topSearchedDrugs,
-        recent_alerts: [] 
+        recent_alerts: (stockItems || [])
+          .filter(s => s.quantity <= s.threshold)
+          .map(s => ({
+            common_name: s.drugs?.common_name || s.drugs?.generic_name,
+            strength: s.drugs?.strength,
+            quantity: s.quantity,
+            threshold: s.threshold,
+          }))
+          .sort((a, b) => a.quantity - b.quantity)
+          .slice(0, 5)
       };
     },
     enabled: !!pharmacy?.id && isSupabaseConfigured,
@@ -144,21 +164,56 @@ const PharmacyDashboard = () => {
             <h2 className="font-heading font-semibold text-foreground">Low Stock Alerts</h2>
             <Link to="/dashboard/stock" className="text-sm text-primary hover:underline">View all</Link>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-4">
             {recentAlerts.length === 0 && (
-              <p className="text-sm text-muted-foreground py-4 text-center">No recent alerts</p>
+              <p className="text-sm text-muted-foreground py-8 text-center bg-muted/20 rounded-xl border border-dashed">
+                No low stock alerts. <br/> Your inventory looks healthy!
+              </p>
             )}
-            {recentAlerts.slice(0, 5).map((item: any, i: number) => (
-              <div key={i} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-                <div>
-                  <p className="font-mono-drug text-sm font-medium text-foreground">{item.common_name}</p>
-                  <p className="text-xs text-muted-foreground">{item.sent_at ? new Date(item.sent_at).toLocaleDateString() : ''}</p>
+            {recentAlerts.slice(0, 5).map((item: any, i: number) => {
+              const percentage = Math.min(100, (item.quantity / (item.threshold || 1)) * 100);
+              const isCritical = item.quantity === 0;
+              
+              return (
+                <div key={i} className="group p-3 rounded-xl border border-transparent hover:bg-muted/30 hover:border-border/50 transition-all duration-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="font-bold text-sm text-foreground">{item.common_name}</p>
+                      <p className="text-[10px] text-muted-foreground font-mono-drug uppercase tracking-tighter">
+                        {item.strength} · Threshold: {item.threshold}
+                      </p>
+                    </div>
+                    <Badge className={cn(
+                      "text-[10px] px-1.5 py-0 h-4 border-none",
+                      isCritical ? "bg-red-500 text-white" : "bg-amber-500 text-white"
+                    )}>
+                      {isCritical ? 'OUT OF STOCK' : 'LOW STOCK'}
+                    </Badge>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden skeu-inset">
+                      <div 
+                        className={cn(
+                          "h-full transition-all duration-500 ease-out",
+                          isCritical ? "bg-red-500" : "bg-amber-500"
+                        )}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                    <span className={cn(
+                        "text-xs font-bold font-mono-drug w-12 text-right",
+                        isCritical ? "text-red-600" : "text-amber-600"
+                    )}>
+                        {item.quantity}/{item.threshold}
+                    </span>
+                    <Button size="sm" variant="ghost" className="h-7 px-2 hover:bg-primary/10 hover:text-primary transition-colors" asChild>
+                      <Link to="/dashboard/stock?search={item.common_name}">Update</Link>
+                    </Button>
+                  </div>
                 </div>
-                <Button size="sm" variant="outline" asChild>
-                  <Link to="/dashboard/stock">Update</Link>
-                </Button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

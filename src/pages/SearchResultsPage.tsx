@@ -16,6 +16,25 @@ import { type StockStatus } from '@/components/StockStatusBadge';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { PharmacyMap } from '@/components/PharmacyMap';
+import { toast } from 'sonner';
+
+function computeIsOpenNow(operatingHours: any, isOpen24h: boolean): boolean {
+  if (isOpen24h) return true;
+  if (!operatingHours) return false;
+  try {
+    const now = new Date();
+    // Zimbabwe is CAT (UTC+2)
+    const catOffset = 2 * 60;
+    const localMinutes = ((now.getUTCHours() * 60 + now.getUTCMinutes() + catOffset) % (24 * 60));
+    const days = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+    const dayKey = days[now.getUTCDay()];
+    const hours = operatingHours[dayKey];
+    if (!hours?.open || !hours?.close) return false;
+    const [oh, om] = hours.open.split(':').map(Number);
+    const [ch, cm] = hours.close.split(':').map(Number);
+    return localMinutes >= (oh * 60 + om) && localMinutes < (ch * 60 + cm);
+  } catch { return false; }
+}
 
 interface SearchResult {
   pharmacy_id: string;
@@ -26,12 +45,14 @@ interface SearchResult {
   suburb: string;
   city: string;
   phone: string;
+  whatsapp_number?: string;
   lat: number;
   lng: number;
   quantity: number;
   unit_price: number | null;
   stock_status: StockStatus;
   distance_km: number;
+  is_open_now: boolean;
 }
 
 async function fetchNearbyPharmacies(
@@ -66,12 +87,14 @@ async function fetchNearbyPharmacies(
       suburb:        item.suburb,
       city:          item.city,
       phone:         item.phone ?? '',
+      whatsapp_number: item.whatsapp_number ?? '',
       lat:           item.lat ?? item.latitude ?? 0,
       lng:           item.lng ?? item.longitude ?? 0,
       quantity:      item.quantity,
       unit_price:    item.unit_price,
       stock_status:  item.stock_status as StockStatus,
       distance_km:   item.distance_km ?? 0,
+      is_open_now:   computeIsOpenNow(item.operating_hours, item.is_open_24h),
     }));
   } catch (err: any) {
     clearTimeout(timeout);
@@ -313,8 +336,9 @@ const SearchResultsPage = () => {
                       quantity={result.quantity}
                       unitPrice={result.unit_price}
                       phone={result.phone}
+                      whatsappNumber={result.whatsapp_number}
                       drugName={result.drug_strength ? `${result.drug_name} ${result.drug_strength}` : result.drug_name}
-                      isOpenNow={false}
+                      isOpenNow={result.is_open_now ?? false}
                       isCheapest={result.unit_price === cheapestPrice && cheapestPrice !== Infinity}
                     />
                   ))}

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Save, Building2, MapPin, Phone, Mail, Clock, Shield, Lock } from 'lucide-react';
+import { Save, Building2, MapPin, Phone, Mail, Clock, Shield, Lock, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,19 +25,20 @@ const PharmacyProfilePage = () => {
     suburb: '',
     city: 'Harare',
     phone: '',
+    whatsapp_number: '',
     email: '',
     mcazLicense: '',
     isOpen24h: false,
   });
 
-  const [hours, setHours] = useState({
-    monday: { open: '08:00', close: '18:00', closed: false },
-    tuesday: { open: '08:00', close: '18:00', closed: false },
-    wednesday: { open: '08:00', close: '18:00', closed: false },
-    thursday: { open: '08:00', close: '18:00', closed: false },
-    friday: { open: '08:00', close: '18:00', closed: false },
-    saturday: { open: '08:00', close: '13:00', closed: false },
-    sunday: { open: '09:00', close: '12:00', closed: true },
+  const [hours, setHours] = useState<Record<string, { open: string; close: string } | null>>({
+    monday: { open: '08:00', close: '17:00' },
+    tuesday: { open: '08:00', close: '17:00' },
+    wednesday: { open: '08:00', close: '17:00' },
+    thursday: { open: '08:00', close: '17:00' },
+    friday: { open: '08:00', close: '17:00' },
+    saturday: { open: '08:00', close: '13:00' },
+    sunday: null,
   });
 
   useEffect(() => {
@@ -48,6 +49,7 @@ const PharmacyProfilePage = () => {
         suburb: pharmacy.suburb || '',
         city: pharmacy.city || 'Harare',
         phone: pharmacy.phone || '',
+        whatsapp_number: '',
         email: pharmacy.email || '',
         mcazLicense: '',
         isOpen24h: false,
@@ -67,6 +69,7 @@ const PharmacyProfilePage = () => {
               suburb: p.suburb || pharmacy.suburb || '',
               city: p.city || pharmacy.city || 'Harare',
               phone: p.phone || pharmacy.phone || '',
+              whatsapp_number: p.whatsapp_number || '',
               email: p.email || pharmacy.email || '',
               mcazLicense: p.mcaz_license || '',
               isOpen24h: p.is_open_24h || false,
@@ -85,11 +88,27 @@ const PharmacyProfilePage = () => {
     setForm(prev => ({ ...prev, [field]: value }));
   };
 
-  const updateHours = (day: string, field: string, value: string | boolean) => {
+  const updateHours = (day: string, field: 'open' | 'close' | 'closed', value: any) => {
+    setHours(prev => {
+      const current = prev[day] || { open: '08:00', close: '17:00' };
+      if (field === 'closed') {
+        return { ...prev, [day]: value ? null : { ...current } };
+      }
+      return { ...prev, [day]: { ...current, [field]: value } };
+    });
+  };
+
+  const copyMonToFri = () => {
+    const mon = hours.monday;
+    if (!mon) return;
     setHours(prev => ({
       ...prev,
-      [day]: { ...prev[day as keyof typeof prev], [field]: value },
+      tuesday: { ...mon },
+      wednesday: { ...mon },
+      thursday: { ...mon },
+      friday: { ...mon },
     }));
+    toast({ title: 'Hours updated', description: 'Monday hours copied to all weekdays.' });
   };
 
   const handleSave = async () => {
@@ -104,6 +123,7 @@ const PharmacyProfilePage = () => {
           suburb: form.suburb,
           city: form.city,
           phone: form.phone,
+          whatsapp_number: form.whatsapp_number,
           mcaz_license: form.mcazLicense,
           is_open_24h: form.isOpen24h,
           operating_hours: hours,
@@ -203,74 +223,122 @@ const PharmacyProfilePage = () => {
             Contact Details
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid sm:grid-cols-2 gap-4">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="phone">Phone Number</Label>
-              <Input id="phone" value={form.phone} onChange={(e) => updateField('phone', e.target.value)} />
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input 
+                  id="phone" 
+                  value={form.phone} 
+                  onChange={(e) => updateField('phone', e.target.value)} 
+                  className="pl-10 h-11" 
+                />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input id="email" type="email" value={form.email} onChange={(e) => updateField('email', e.target.value)} />
+              <Label htmlFor="whatsapp">WhatsApp Number</Label>
+              <div className="relative">
+                <MessageCircle className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#25D366]" />
+                <Input 
+                  id="whatsapp" 
+                  value={form.whatsapp_number} 
+                  onChange={(e) => updateField('whatsapp_number', e.target.value)} 
+                  placeholder="07X XXX XXXX"
+                  className="pl-10 h-11" 
+                />
+              </div>
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email Address</Label>
+            <Input id="email" type="email" value={form.email} onChange={(e) => updateField('email', e.target.value)} />
           </div>
         </CardContent>
       </Card>
 
-      {/* Operating Hours */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Clock className="w-4 h-4 text-primary" />
-            Operating Hours
-          </CardTitle>
-          <CardDescription>
-            <div className="flex items-center gap-3 mt-2">
-              <Switch
-                checked={form.isOpen24h}
-                onCheckedChange={(v) => updateField('isOpen24h', v)}
-                id="open24h"
-              />
-              <Label htmlFor="open24h" className="cursor-pointer text-sm">Open 24 hours</Label>
-            </div>
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Clock className="w-4 h-4 text-primary" />
+              Operating Hours
+            </CardTitle>
+            <CardDescription>Set your standard opening and closing times</CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <Label htmlFor="open24h" className="cursor-pointer text-sm font-medium">Open 24/7</Label>
+            <Switch
+              checked={form.isOpen24h}
+              onCheckedChange={(v) => updateField('isOpen24h', v)}
+              id="open24h"
+            />
+          </div>
         </CardHeader>
         {!form.isOpen24h && (
-          <CardContent>
-            <div className="skeu-inset p-1">
-              {days.map((day) => {
-                const h = hours[day];
-                return (
-                  <div
-                    key={day}
-                    className="grid grid-cols-[100px_1fr] sm:grid-cols-[120px_100px_100px_80px] gap-3 items-center py-2.5 px-3 border-b border-border last:border-0 table-row-skeu"
-                  >
-                    <span className="text-sm font-medium capitalize text-foreground">{day}</span>
-                    {h.closed ? (
-                      <span className="text-sm text-muted-foreground col-span-1 sm:col-span-2">Closed</span>
-                    ) : (
-                      <>
-                        <Input
-                          type="time"
-                          value={h.open}
-                          onChange={(e) => updateHours(day, 'open', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                        <Input
-                          type="time"
-                          value={h.close}
-                          onChange={(e) => updateHours(day, 'close', e.target.value)}
-                          className="h-8 text-sm"
-                        />
-                      </>
-                    )}
-                    <Switch
-                      checked={!h.closed}
-                      onCheckedChange={(v) => updateHours(day, 'closed', !v)}
-                    />
-                  </div>
-                );
-              })}
+          <CardContent className="space-y-6">
+            <div className="skeu-inset rounded-xl overflow-hidden border">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 border-b text-muted-foreground">
+                    <th className="text-left p-3 font-medium pl-6">Day</th>
+                    <th className="text-center p-3 font-medium">Status</th>
+                    <th className="text-center p-3 font-medium">Open</th>
+                    <th className="text-center p-3 font-medium pr-6">Close</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {days.map((day) => {
+                    const h = hours[day];
+                    const isClosed = h === null;
+                    return (
+                      <tr key={day} className="hover:bg-muted/10 transition-colors">
+                        <td className="p-3 pl-6 font-medium capitalize text-foreground">{day}</td>
+                        <td className="p-3">
+                          <div className="flex justify-center flex-col items-center gap-1">
+                             <Switch
+                               checked={!isClosed}
+                               onCheckedChange={(v) => updateHours(day, 'closed', !v)}
+                             />
+                             <span className="text-[10px] uppercase font-bold text-muted-foreground">
+                                {isClosed ? 'Closed' : 'Open'}
+                             </span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                           <Input
+                             type="time"
+                             value={h?.open || '08:00'}
+                             disabled={isClosed}
+                             onChange={(e) => updateHours(day, 'open', e.target.value)}
+                             className="h-9 w-28 mx-auto text-sm text-center shadow-sm"
+                           />
+                        </td>
+                        <td className="p-3 pr-6">
+                           <Input
+                             type="time"
+                             value={h?.close || '17:00'}
+                             disabled={isClosed}
+                             onChange={(e) => updateHours(day, 'close', e.target.value)}
+                             className="h-9 w-28 mx-auto text-sm text-center shadow-sm"
+                           />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex justify-start">
+               <Button 
+                 variant="outline" 
+                 size="sm" 
+                 onClick={copyMonToFri}
+                 className="text-xs h-9 btn-skeu-outline"
+                >
+                 Copy Monday to Mon–Fri
+               </Button>
             </div>
           </CardContent>
         )}

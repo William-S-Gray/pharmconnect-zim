@@ -30,6 +30,8 @@ const PharmacyDeleteRequestsPage = lazy(() => import("./pages/PharmacyDeleteRequ
 const TrashPage = lazy(() => import("./pages/TrashPage"));
 const UserManagementPage = lazy(() => import("./pages/admin/UserManagementPage"));
 const ReservationsPage = lazy(() => import("./pages/ReservationsPage"));
+const QuickStockUpdatePage = lazy(() => import("./pages/QuickStockUpdatePage"));
+const PublicPharmacyPage = lazy(() => import("./pages/PublicPharmacyPage"));
 
 // Admin pages
 const AdminOverviewPage = lazy(() => import("./pages/admin/AdminOverviewPage"));
@@ -42,6 +44,7 @@ const AdminProfilePage = lazy(() => import("./pages/admin/AdminProfilePage"));
 const AdminAuditLogPage = lazy(() => import("./pages/admin/AdminAuditLogPage"));
 const AdminDeleteRequestsPage = lazy(() => import("./pages/admin/AdminDeleteRequestsPage"));
 const AdminReservationsPage = lazy(() => import("./pages/admin/AdminReservationsPage"));
+const B2BSupplyIntelligencePage = lazy(() => import("./pages/admin/B2BSupplyIntelligencePage"));
 const ConflictManagementPage = lazy(() => import("./pages/admin/ConflictManagementPage"));
 
 const queryClient = new QueryClient({
@@ -75,6 +78,7 @@ const App = () => (
             <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/discover" element={<DrugDiscoveryPage />} />
             <Route path="/pharmacy/register" element={<PharmacyRegisterPage />} />
+            <Route path="/pharmacy/:id" element={<PublicPharmacyPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/pharmacy/reset-password" element={<ResetPasswordPage />} />
             <Route path="/dashboard" element={
@@ -84,6 +88,7 @@ const App = () => (
             }>
               <Route index element={<PharmacyDashboard />} />
               <Route path="stock" element={<StockManagementPage />} />
+              <Route path="quick-update" element={<QuickStockUpdatePage />} />
               <Route path="requests" element={<PharmacyRequestsPage />} />
               <Route path="approvals" element={<PharmacyApprovalsPage />} />
               <Route path="staff" element={<UserManagementPage />} />
@@ -106,6 +111,7 @@ const App = () => (
               <Route index element={<AdminOverviewPage />} />
               <Route path="approvals" element={<AdminApprovalsPage />} />
               <Route path="analytics" element={<AdminAnalyticsPage />} />
+              <Route path="supply-iq" element={<B2BSupplyIntelligencePage />} />
               <Route path="drugs" element={<AdminDrugsPage />} />
               <Route path="pharmacies" element={<AdminPharmaciesPage />} />
               <Route path="staff" element={<UserManagementPage />} />

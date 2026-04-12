@@ -24,6 +24,7 @@ export interface UserProfile {
   email: string;
   full_name: string;
   global_role: UserRole;
+  avatar_url?: string;
 }
 
 export interface AuthUser {
@@ -145,10 +146,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   email: authUser.email ?? '',
                   full_name: authUser.user_metadata?.name ?? authUser.user_metadata?.full_name ?? 'System User',
                   global_role: isDashboardAdmin ? 'super_admin' : 'pharmacy_staff',
+                  avatar_url: authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture ?? null,
                 }, { onConflict: 'id' })
                 .select()
                 .maybeSingle();
               if (upserted) profileData = upserted as UserProfile;
+            }
+          }
+
+          // --- AUTO-LINKING LOGIC ---
+          // Check for pending invitations if no membership exists
+          const { data: existingMembership } = await supabase
+            .from('memberships')
+            .select('id')
+            .eq('user_id', userId)
+            .maybeSingle();
+
+          if (!existingMembership && profileData?.email) {
+            const { data: invData } = await supabase
+              .from('invitations')
+              .select('*')
+              .eq('email', profileData.email)
+              .eq('status', 'PENDING')
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+
+            if (invData) {
+              console.log('DEBUG: Found pending invitation, linking user...', invData);
+              const { error: linkError } = await supabase
+                .from('memberships')
+                .insert({
+                  user_id: userId,
+                  pharmacy_id: invData.pharmacy_id,
+                  role: invData.role
+                });
+
+              if (!linkError) {
+                // Mark invitation as accepted
+                await supabase
+                  .from('invitations')
+                  .update({ status: 'ACCEPTED' })
+                  .eq('id', invData.id);
+                
+                toast.success('Successfully linked to your pharmacy team!');
+              }
             }
           }
 
@@ -183,7 +225,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           finalRole = 'super_admin';
           // Sync DB in background if it was incorrect
           if (profileData && profileData.global_role !== 'super_admin') {
-            supabase.from('profiles').update({ global_role: 'super_admin' }).eq('id', userId).then();
+            supabase.from('profiles').update({ 
+               global_role: 'super_admin',
+               avatar_url: authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture ?? profileData.avatar_url
+            }).eq('id', userId).then();
+          }
+        } else if (profileData && (authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture)) {
+          // Sync avatar if it changed/arrived from Google
+          const newAvatar = authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture;
+          if (newAvatar !== profileData.avatar_url) {
+            supabase.from('profiles').update({ avatar_url: newAvatar }).eq('id', userId).then();
+            profileData.avatar_url = newAvatar;
           }
         }
       }

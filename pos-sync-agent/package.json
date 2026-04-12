@@ -1,0 +1,17 @@
+{
+  "name": "pharmconnect-pos-agent",
+  "version": "1.0.0",
+  "description": "Zero-click sync agent to bridge local pharmacy POS systems with Supabase",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "better-sqlite3": "^9.4.0",
+    "dotenv": "^16.4.1",
+    "h3-js": "^4.4.0"
+  }
+}

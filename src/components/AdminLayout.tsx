@@ -13,6 +13,7 @@ const adminNavItems = [
   { label: 'Overview', icon: LayoutDashboard, path: '/admin' },
   { label: 'Approvals', icon: CheckSquare, path: '/admin/approvals' },
   { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+  { label: 'Supply IQ', icon: BarChart3, path: '/admin/supply-iq' },
   { label: 'Drug Database', icon: Database, path: '/admin/drugs' },
   { label: 'Pharmacies', icon: Store, path: '/admin/pharmacies' },
   { label: 'Reservations', icon: ShoppingBag, path: '/admin/reservations' },
@@ -27,7 +28,7 @@ const adminNavItems = [
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { pharmacy, logout } = useAuth();
+  const { pharmacy, profile, logout } = useAuth();
   
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['admin', 'pending-delete-count'],
@@ -89,9 +90,31 @@ export function AdminLayout() {
         </div>
 
         <div className="px-3 py-4">
-          <div className="card-pharma mb-4 p-3">
-            <p className="font-heading font-semibold text-sm truncate text-foreground">{pharmacy?.name || 'Admin'}</p>
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive font-medium">ADMIN</span>
+          <div className="card-pharma mb-4 p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full border border-border overflow-hidden bg-muted flex items-center justify-center shrink-0 shadow-inner">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <Users className="w-5 h-5 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-heading font-semibold text-sm truncate text-foreground">{profile?.full_name || 'Admin User'}</p>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                   <div className="w-1.5 h-1.5 rounded-full bg-destructive animate-pulse" />
+                   <span className="text-[10px] text-destructive font-bold uppercase tracking-tighter">System Super Admin</span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+               <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[100px]">
+                 {profile?.email}
+               </span>
+               <Badge className="bg-destructive/10 text-destructive text-[9px] h-4 px-1.5 border-none shadow-none">
+                 LEVEL 1
+               </Badge>
+            </div>
           </div>
         </div>
 

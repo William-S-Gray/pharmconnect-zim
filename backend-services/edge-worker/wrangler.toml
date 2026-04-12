@@ -1,0 +1,10 @@
+name = "pharmconnect-edge-cache"
+main = "src/index.js"
+compatibility_date = "2024-04-12"
+
+[vars]
+SUPABASE_URL = "https://your-project.supabase.co"
+# DO NOT store service role keys here in production! Use Cloudflare Secrets.
+
+[env.production]
+name = "pharmconnect-edge-cache-prod"

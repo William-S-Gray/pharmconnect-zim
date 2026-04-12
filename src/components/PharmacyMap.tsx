@@ -4,6 +4,8 @@ import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
 import { useSearchStore } from '@/stores/searchStore';
 
+const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
+
 export interface PharmacyMarker {
   pharmacy_id: string;
   pharmacy_name: string;
@@ -55,6 +57,7 @@ export function PharmacyMap({
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: apiKey,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const [selected, setSelected] = useState<PharmacyMarker | null>(null);

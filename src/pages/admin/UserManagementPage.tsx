@@ -19,6 +19,7 @@ import { PaginationControls } from '@/components/PaginationControls';
 import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
 import { requestDeletion } from '@/lib/lifecycleUtils';
 import { useAuth, UserRole } from '@/context/AuthContext';
+import { sendNewStaffAlert } from '@/lib/emailService';
 
 type ManagedUser = {
   id: string;
@@ -128,6 +129,12 @@ const UserManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
+      
+      // Trigger EmailJS alert
+      if (myRole === 'pharmacy_admin' && pharmacy) {
+        sendNewStaffAlert(user?.email || '', formData.full_name, pharmacy.name).catch(console.error);
+      }
+
       toast.success('User account created successfully');
       setShowCreate(false);
       setFormData({ full_name: '', email: '', password: '', role: 'pharmacy_staff', pharmacy_id: '' });

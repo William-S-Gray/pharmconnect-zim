@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { X, Phone, User, Hash, Package, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
+import { X, Phone, User, Hash, Package, AlertCircle, CheckCircle, Loader2, Truck, CreditCard, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
@@ -33,6 +33,8 @@ export function ReserveDrugModal({
   const [patientName, setPatientName] = useState('');
   const [patientPhone, setPatientPhone] = useState('');
   const [quantity, setQuantity] = useState(1);
+  const [deliveryRequired, setDeliveryRequired] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState('');
 
   const [nameError, setNameError] = useState('');
   const [phoneError, setPhoneError] = useState('');
@@ -51,6 +53,10 @@ export function ReserveDrugModal({
       ok = false;
     } else {
       setPhoneError('');
+    }
+    if (deliveryRequired && (!deliveryAddress.trim() || deliveryAddress.trim().length < 5)) {
+      setErrorMsg('Please provide a valid delivery address.');
+      return false;
     }
     return ok;
   };
@@ -76,6 +82,9 @@ export function ReserveDrugModal({
           patient_phone: patientPhone.trim(),
           quantity,
           unit_price:    unitPrice ?? null,
+          delivery_required: deliveryRequired,
+          delivery_address:  deliveryRequired ? deliveryAddress.trim() : null,
+          payment_status:    deliveryRequired ? 'PENDING' : 'PENDING'
         }])
         .select('reference_code, reserved_until')
         .single();
@@ -217,6 +226,51 @@ export function ReserveDrugModal({
                   />
                 </div>
               </div>
+
+              {/* Delivery Toggle */}
+              <div 
+                className={`p-3 rounded-xl border transition-all cursor-pointer ${deliveryRequired ? 'border-primary bg-primary/5 shadow-sm' : 'border-border bg-card'}`}
+                onClick={() => setDeliveryRequired(!deliveryRequired)}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${deliveryRequired ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>
+                      <Truck className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">Home Delivery</p>
+                      <p className="text-xs text-muted-foreground">Get it delivered to your doorstep</p>
+                    </div>
+                  </div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${deliveryRequired ? 'border-primary bg-primary' : 'border-muted-foreground/30'}`}>
+                    {deliveryRequired && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                </div>
+              </div>
+
+              {deliveryRequired && (
+                <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="text-sm font-medium text-foreground block">Delivery Address *</label>
+                  <div className="relative">
+                    <Home className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+                    <textarea
+                      value={deliveryAddress}
+                      onChange={e => setDeliveryAddress(e.target.value)}
+                      placeholder="Street address, Suburb, City..."
+                      className="w-full min-h-[80px] pl-9 pr-4 py-2 bg-background border border-border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-muted-foreground/50"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {deliveryRequired && unitPrice != null && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex gap-3">
+                  <CreditCard className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-800 leading-relaxed">
+                    <strong>Payment Required:</strong> Delivery orders must be paid via EcoCash/Paynow to secure the service. A platform fee of 2% applies.
+                  </p>
+                </div>
+              )}
 
               {/* Disclaimer */}
               <p className="text-xs text-muted-foreground leading-relaxed">

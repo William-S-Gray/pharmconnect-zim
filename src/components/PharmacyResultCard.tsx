@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Phone, MapPin, Clock, MessageCircle, Send, Navigation, ShoppingBag } from 'lucide-react';
+import { Phone, MapPin, Clock, MessageCircle, Send, Navigation, ShoppingBag, ArrowRight, Share2, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
@@ -23,6 +24,7 @@ interface PharmacyResultCardProps {
   quantity: number;
   unitPrice: number | null;
   phone: string;
+  whatsappNumber?: string;
   isOpenNow: boolean;
   drugName?: string;
   onHover?: () => void;
@@ -43,6 +45,7 @@ export function PharmacyResultCard({
   quantity,
   unitPrice,
   phone,
+  whatsappNumber: propWhatsappNumber,
   isOpenNow,
   drugName = 'this medicine',
   onHover,
@@ -54,9 +57,27 @@ export function PharmacyResultCard({
   const [senderContact, setSenderContact] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const whatsappNumber = (phone || '').replace(/\s+/g, '').replace(/^0/, '263');
+  const whatsappNumber = (propWhatsappNumber || phone || '').replace(/\s+/g, '').replace(/^0/, '263');
   const whatsappMessage = encodeURIComponent(`Hi ${pharmacyName}, I found you on PharmConnect Zim. Do you have ${drugName} in stock?`);
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${whatsappMessage}`;
+  
+  const handleShare = async () => {
+    const url = `${window.location.origin}/pharmacy/${pharmacyId}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: pharmacyName,
+          text: `Check out ${pharmacyName} on PharmConnect Zim`,
+          url: url
+        });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success('Link copied to clipboard!');
+      }
+    } catch {
+      toast.error('Could not share profile');
+    }
+  };
   const hasCoords = lat !== 0 && lng !== 0;
   const directionsUrl = hasCoords
     ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
@@ -182,6 +203,23 @@ export function PharmacyResultCard({
           >
             <Send className="w-3.5 h-3.5" />
           </Button>
+          <Button
+            variant="ghost"
+            className="px-3 h-9 text-muted-foreground hover:text-foreground"
+            onClick={handleShare}
+            title="Share"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+        
+        <div className="mt-3 pt-3 border-t border-border flex justify-end">
+          <Link 
+            to={`/pharmacy/${pharmacyId}`} 
+            className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+          >
+            View Profile <ArrowRight className="w-3 h-3" />
+          </Link>
         </div>
       </div>
 

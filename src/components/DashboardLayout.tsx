@@ -1,11 +1,12 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
-import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle, ShoppingBag } from 'lucide-react';
+import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle, ShoppingBag, Zap } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabaseClient';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { NotificationBell } from '@/components/NotificationBell';
 import { PersistentAlertList } from '@/components/PersistentAlertList';
 import { ConnectivityBanner } from './ConnectivityBanner';
 import { MobileNav } from './MobileNav';
@@ -15,6 +16,7 @@ const navItems = [
   { label: 'Reservations',   icon: ShoppingBag,     path: '/dashboard/reservations' },
   { label: 'Requested Drugs',icon: MessageCircle,   path: '/dashboard/requests' },
   { label: 'Inventory',      icon: Package,         path: '/dashboard/stock' },
+  { label: 'Quick Update',   icon: Zap,             path: '/dashboard/quick-update' },
   { label: 'Staff Approvals', icon: CheckSquare, path: '/dashboard/approvals', adminOnly: true },
   { label: 'User Management', icon: Users, path: '/dashboard/users', adminOnly: true },
   { label: 'Analytics', icon: BarChart3, path: '/dashboard/analytics', adminOnly: true },
@@ -30,7 +32,7 @@ const navItems = [
 export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { pharmacy, role, logout } = useAuth();
+  const { pharmacy, role, profile, logout } = useAuth();
   
   const { data: pendingCount = 0 } = useQuery({
     queryKey: ['pharmacy', 'pending-delete-count', pharmacy?.id],
@@ -102,23 +104,41 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
       <div className="flex-1 flex">
         {/* Sidebar */}
         <aside className="hidden md:flex w-60 flex-col border-r border-border fixed inset-y-0 left-0 z-40 sidebar-skeu">
-        <div className="p-4 border-b border-border">
+        <div className="p-4 border-b border-border flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center brand-icon-skeu">
               <Pill className="w-4 h-4 text-white" />
             </div>
             <span className="font-heading font-bold text-foreground text-emboss">PharmConnect Zim</span>
           </Link>
+          <NotificationBell />
         </div>
 
         <div className="px-3 py-4">
-          <div className="card-pharma mb-4 p-3">
-            <p className="font-heading font-semibold text-sm truncate text-foreground">{pharmacy?.name || 'Pharmacy'}</p>
-            <div className="flex items-center justify-between mt-1">
-              <span className="badge-approved text-[10px]">{pharmacy?.status || 'PENDING'}</span>
-              <span className="text-[10px] text-muted-foreground uppercase tracking-tighter font-bold">
-                {role === 'pharmacy_admin' ? 'Admin' : 'Staff'}
+          <div className="card-pharma mb-4 p-3 flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full border border-border overflow-hidden bg-muted flex items-center justify-center shrink-0 shadow-inner">
+                {profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt="Profile" className="w-full h-full object-cover" />
+                ) : (
+                  <Users className="w-5 h-5 text-muted-foreground" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="font-heading font-semibold text-sm truncate text-foreground">{profile?.full_name || 'User'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{pharmacy?.name || 'No Pharmacy'}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-2 border-t border-border/50">
+              <span className={cn(
+                "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider",
+                pharmacy?.status === 'APPROVED' ? "bg-green-500/10 text-green-600" : "bg-orange-500/10 text-orange-600"
+              )}>
+                {pharmacy?.status || 'PENDING'}
               </span>
+              <Badge variant="outline" className="text-[9px] font-bold h-4 px-1 border-primary/20 bg-primary/5 text-primary">
+                {role?.replace('_', ' ').toUpperCase() || 'STAFF'}
+              </Badge>
             </div>
           </div>
         </div>
