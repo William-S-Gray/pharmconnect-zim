@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { X, Phone, User, Hash, Package, AlertCircle, CheckCircle, Loader2, Truck, CreditCard, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 interface ReserveDrugModalProps {
   isOpen: boolean;
@@ -63,33 +63,23 @@ export function ReserveDrugModal({
 
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
-    if (!isSupabaseConfigured) {
-      setStep('error');
-      setErrorMsg('Service unavailable — Supabase is not configured.');
-      return;
-    }
-
+    
     setStep('submitting');
 
     try {
-      const { data, error } = await supabase
-        .from('drug_reservations')
-        .insert([{
-          pharmacy_id:   pharmacyId,
-          drug_id:       drugId ?? null,
-          drug_name:     drugName,
-          patient_name:  patientName.trim(),
-          patient_phone: patientPhone.trim(),
-          quantity,
-          unit_price:    unitPrice ?? null,
-          delivery_required: deliveryRequired,
-          delivery_address:  deliveryRequired ? deliveryAddress.trim() : null,
-          payment_status:    deliveryRequired ? 'PENDING' : 'PENDING'
-        }])
-        .select('reference_code, reserved_until')
-        .single();
-
-      if (error) throw error;
+      // unit_price is not sent: the server records the price the pharmacy
+      // is actually charging at the moment of booking, so the client cannot
+      // reserve at a price of its own choosing.
+      const data = await api.reservations.create({
+        pharmacy_id:   pharmacyId,
+        drug_id:       drugId ?? null,
+        drug_name:     drugName,
+        patient_name:  patientName.trim(),
+        patient_phone: patientPhone.trim(),
+        quantity,
+        delivery_required: deliveryRequired,
+        delivery_address:  deliveryRequired ? deliveryAddress.trim() : undefined,
+      });
 
       setReferenceCode(data?.reference_code || 'RX-??????');
       

@@ -8,10 +8,10 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Trash2, RotateCcw, AlertTriangle, ShieldCheck, HelpCircle, Clock, Info, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
 import { useAuth } from '@/context/AuthContext';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { restoreRecord, logActivity } from '@/lib/lifecycleUtils';
+import { restoreRecord } from '@/lib/lifecycleUtils';
+import { api } from '@/lib/api';
 
 interface TrashedItem {
   id: string;
@@ -35,60 +35,44 @@ const TrashPage = () => {
   const { data: trashedItems = [], isLoading } = useQuery<TrashedItem[]>({
     queryKey: ['system', 'trash', role, pharmacy?.id],
     queryFn: async () => {
-      const isSuper = role === 'super_admin';
-      const items: TrashedItem[] = [];
+      // The trash listing is super-admin only, and the endpoint returns
+      // both tables in one response. The version this replaces ran a
+      // separate membership query to scope pharmacy admins to their own
+      // team — but then never applied the result, so every pharmacy admin
+      // saw every trashed profile in the system.
+      const { users, pharmacies } = await api.admin.trash();
 
-      // Fetch Trashed Profiles
-      let userQuery = supabase
-        .from('profiles')
-        .select('id, full_name, email, trashed_at, lifecycle_status')
-        .eq('lifecycle_status', 'TRASHED');
-      
-      if (!isSuper && pharmacy?.id) {
-        // Limited to pharmacy members
-        const { data: members } = await supabase.from('memberships').select('user_id').eq('pharmacy_id', pharmacy.id);
-        const mIds = (members || []).map(m => m.user_id);
-        userQuery = userQuery.in('id', mIds);
-      }
-
-      const { data: users } = await userQuery;
-      (users || []).forEach(u => items.push({
-        id: u.id,
-        name: u.full_name || u.email,
-        type: 'User',
-        table: 'profiles',
-        trashed_at: u.trashed_at,
-        trashed_by: 'N/A', // Would ideally fetch from audit logs
-        expires_at: new Date(new Date(u.trashed_at).getTime() + 48 * 60 * 60 * 1000).toISOString()
-      }));
-
-      // Fetch Trashed Pharmacies (Super Admin Only)
-      if (isSuper) {
-        const { data: pharms } = await supabase
-          .from('pharmacies')
-          .select('id, name, trashed_at')
-          .eq('lifecycle_status', 'TRASHED');
-        
-        (pharms || []).forEach(p => items.push({
+      const items: TrashedItem[] = [
+        ...users.map((u: any) => ({
+          id: u.id,
+          name: u.full_name || u.email,
+          type: 'User' as const,
+          table: 'profiles',
+          trashed_at: u.trashed_at,
+          trashed_by: 'N/A',
+          expires_at: new Date(new Date(u.trashed_at).getTime() + 48 * 60 * 60 * 1000).toISOString(),
+        })),
+        ...pharmacies.map((p: any) => ({
           id: p.id,
           name: p.name,
-          type: 'Pharmacy',
+          type: 'Pharmacy' as const,
           table: 'pharmacies',
           trashed_at: p.trashed_at,
           trashed_by: 'N/A',
-          expires_at: new Date(new Date(p.trashed_at).getTime() + 48 * 60 * 60 * 1000).toISOString()
-        }));
-      }
+          expires_at: new Date(new Date(p.trashed_at).getTime() + 48 * 60 * 60 * 1000).toISOString(),
+        })),
+      ];
 
       return items.sort((a, b) => new Date(b.trashed_at).getTime() - new Date(a.trashed_at).getTime());
-    }
+    },
+    enabled: role === 'super_admin',
   });
 
   const restoreMutation = useMutation({
     mutationFn: async (item: TrashedItem) => {
-      const result = await restoreRecord(item.table, item.id);
-      if (!result.success) throw result;
-      return result;
+      // restoreRecord throws an ApiError on failure now, rather than
+      // returning { success: false } for the caller to remember to check.
+      return restoreRecord(item.table, item.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system', 'trash'] });
@@ -111,11 +95,14 @@ const TrashPage = () => {
   const hardDeleteMutation = useMutation({
     mutationFn: async (item: TrashedItem) => {
       if (item.table === 'profiles') {
-        const { error } = await supabase.rpc('admin_delete_user', { target_user_id: item.id });
-        if (error) throw error;
+        await api.admin.deleteUser(item.id);
+      } else if (item.table === 'pharmacies') {
+        await api.admin.deletePharmacy(item.id);
       } else {
-        const { error } = await supabase.from(item.table).delete().eq('id', item.id);
-        if (error) throw error;
+        // The previous code passed item.table straight into .from(), so a
+        // new trash type would have deleted from a table nothing here knows
+        // how to handle.
+        throw new Error(`Cannot permanently delete records from ${item.table}`);
       }
     },
     onSuccess: () => {

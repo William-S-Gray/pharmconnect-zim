@@ -1,7 +1,7 @@
 import React, { useEffect, useCallback } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -43,58 +43,39 @@ const ReservationsPage: React.FC = () => {
   const { data: reservations = [], isLoading, refetch } = useQuery<Reservation[]>({
     queryKey: ['reservations', pharmacy?.id],
     queryFn: async () => {
-      if (!isSupabaseConfigured || !pharmacy?.id) return [];
-      const { data, error } = await supabase
-        .from('drug_reservations')
-        .select('*')
-        .eq('pharmacy_id', pharmacy.id)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data || [];
+      if (!pharmacy?.id) return [];
+      const { items } = await api.reservations.list(pharmacy.id, { limit: 200 });
+      return items as unknown as Reservation[];
     },
-    enabled: !!pharmacy?.id && isSupabaseConfigured,
+    enabled: !!pharmacy?.id,
     refetchInterval: 30000, // poll every 30s as backup
   });
 
   // ── Real-time subscription ───────────────────────────────────────────────
   useEffect(() => {
-    if (!pharmacy?.id || !isSupabaseConfigured) return;
+    if (!pharmacy?.id) return;
 
-    const channel = supabase
-      .channel(`reservations-${pharmacy.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'drug_reservations',
-          filter: `pharmacy_id=eq.${pharmacy.id}`,
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const r = payload.new as Reservation;
-            toast.info(`📦 New reservation: ${r.drug_name} from ${r.patient_name}`, {
-              action: { label: 'View', onClick: () => refetch() },
-            });
-          }
-          queryClient.invalidateQueries({ queryKey: ['reservations', pharmacy.id] });
+    // The stream is already scoped to pharmacies this session belongs to,
+    // and carries identifiers only — so this invalidates and lets the query
+    // refetch rather than reading a row off the wire.
+    return api.subscribeToChanges(
+      (event) => {
+        if (event.pharmacy_id !== pharmacy.id) return;
+        if (event.op === 'INSERT') {
+          toast.info('📦 New reservation received', {
+            action: { label: 'View', onClick: () => refetch() },
+          });
         }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+        queryClient.invalidateQueries({ queryKey: ['reservations', pharmacy.id] });
+      },
+      { tables: ['drug_reservations'] },
+    );
   }, [pharmacy?.id, queryClient, refetch]);
 
   // ── Status update mutation ───────────────────────────────────────────────
   const updateMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: ReservationStatus }) => {
-      const { error } = await supabase
-        .from('drug_reservations')
-        .update({ status })
-        .eq('id', id);
-      if (error) throw error;
+      await api.reservations.update(pharmacy!.id, id, { status });
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['reservations', pharmacy?.id] });

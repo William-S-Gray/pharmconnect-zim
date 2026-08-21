@@ -7,7 +7,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Badge } from './ui/badge';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { ReserveDrugModal } from './ReserveDrugModal';
 
@@ -88,24 +88,15 @@ export function PharmacyResultCard({
     
     setIsSubmitting(true);
     try {
-      const { error } = await supabase
-        .from('drug_requests')
-        .insert([{
-          pharmacy_id: pharmacyId,
-          drug_id: drugId,
-          sender_name: senderName,
-          sender_contact: senderContact,
-        }]);
-
-      if (error) throw error;
-      
-      // Also create a persistent notification for the pharmacy
-      await supabase.from('notifications').insert([{
+      // The server raises the pharmacy's notification as part of handling
+      // this; the client used to insert that row itself, which meant any
+      // visitor could write a notification into any pharmacy's feed.
+      await api.requests.create({
         pharmacy_id: pharmacyId,
-        title: 'New Drug Request',
-        message: `${senderName} is looking for ${drugName}. Contact: ${senderContact}`,
-        type: 'REQUEST'
-      }]);
+        drug_id: drugId,
+        sender_name: senderName,
+        sender_contact: senderContact,
+      });
 
       toast.success('Request sent successfully!');
       setRequestOpen(false);

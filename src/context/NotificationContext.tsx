@@ -1,18 +1,18 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabaseClient';
-import { useAuth } from './AuthContext';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
+import { useAuth } from './AuthContext';
+import { api } from '../lib/api';
 
 export interface Notification {
   id: string;
+  user_id: string | null;
+  pharmacy_id: string | null;
   title: string;
   message: string;
   type: 'INFO' | 'WARNING' | 'REQUEST' | 'APPROVAL';
   is_read: boolean;
   is_dismissed: boolean;
   created_at: string;
-  pharmacy_id?: string;
-  user_id?: string;
 }
 
 interface NotificationContextType {
@@ -21,63 +21,58 @@ interface NotificationContextType {
   unreadCount: number;
   markAsRead: (id: string) => Promise<void>;
   dismissNotification: (id: string) => Promise<void>;
+  refresh: () => Promise<void>;
 }
 
 const NotificationContext = createContext<NotificationContextType | null>(null);
 
 export const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
-  const { user, pharmacy, role } = useAuth();
+  const { user } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
-  const fetchNotifications = useCallback(async () => {
-    if (!user) return;
+  // Ids already shown, so a refetch triggered by the realtime stream can
+  // tell a genuinely new notification from one that was already on screen
+  // and avoid re-toasting the whole list.
+  const seenIds = useRef<Set<string>>(new Set());
 
-    let query = supabase
-      .from('notifications')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    // Filter by user or pharmacy
-    if (pharmacy?.id) {
-      query = query.or(`user_id.eq.${user.id},pharmacy_id.eq.${pharmacy.id}`);
-    } else {
-      query = query.eq('user_id', user.id);
+  /**
+   * The audience filter used to be built here, as an `.or()` string
+   * combining user_id and pharmacy_id. It is now the server's decision —
+   * the endpoint returns exactly the notifications this session may see,
+   * so a bug in this file can no longer widen what is fetched.
+   */
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setNotifications([]);
+      return;
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching notifications:', error);
-    } else {
-      setNotifications(data || []);
+    try {
+      setNotifications(await api.notifications.list() as unknown as Notification[]);
+    } catch (err) {
+      console.error('Error fetching notifications:', err);
     }
-  }, [user, pharmacy]);
+  }, [user]);
 
-  const markAsRead = async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_read: true })
-      .eq('id', id);
-
-    if (!error) {
-      setNotifications(prev => 
-        prev.map(n => n.id === id ? { ...n, is_read: true } : n)
-      );
+  const markAsRead = useCallback(async (id: string) => {
+    // Optimistic: the badge should clear on click, not a round trip later.
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    try {
+      await api.notifications.markRead(id);
+    } catch (err) {
+      console.error('Failed to mark notification read:', err);
+      refresh();
     }
-  };
+  }, [refresh]);
 
-  const dismissNotification = async (id: string) => {
-    const { error } = await supabase
-      .from('notifications')
-      .update({ is_dismissed: true })
-      .eq('id', id);
-
-    if (!error) {
-      setNotifications(prev => 
-        prev.map(n => n.id === id ? { ...n, is_dismissed: true } : n)
-      );
+  const dismissNotification = useCallback(async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_dismissed: true } : n)));
+    try {
+      await api.notifications.dismiss(id);
+    } catch (err) {
+      console.error('Failed to dismiss notification:', err);
+      refresh();
     }
-  };
+  }, [refresh]);
 
   useEffect(() => {
     if (!user) {
@@ -85,55 +80,57 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
       return;
     }
 
-    fetchNotifications();
+    refresh();
 
-    // Subscribe to Realtime notifications
-    const channel = supabase
-      .channel('public:notifications')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notifications',
-          filter: pharmacy?.id 
-            ? `pharmacy_id=eq.${pharmacy.id}` 
-            : `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          const newNotif = payload.new as Notification;
-          setNotifications(prev => [newNotif, ...prev]);
-          
-          // Show toast
-          if (newNotif.type === 'REQUEST' || newNotif.type === 'APPROVAL') {
-            toast.message(newNotif.title, {
-              description: newNotif.message,
-              duration: 10000, // Longer for important ones
-            });
-          } else {
-            toast.info(newNotif.title, {
-              description: newNotif.message
+    /**
+     * Replaces the Supabase realtime channel.
+     *
+     * That subscription carried the whole row and pushed it straight into
+     * state. The SSE event carries identifiers only — deliberately, so the
+     * stream cannot deliver a row the API would not have served — so this
+     * refetches and then reports whatever is genuinely new.
+     */
+    const unsubscribe = api.subscribeToChanges(
+      async (event) => {
+        if (event.op !== 'INSERT') return;
+        try {
+          const fresh = await api.notifications.list() as unknown as Notification[];
+          // Compare against what was on screen before this refetch to decide
+          // what is genuinely new. Read from the ref rather than from state
+          // so the comparison does not depend on this closure's snapshot.
+          const known = seenIds.current;
+          setNotifications(fresh);
+          for (const n of fresh) {
+            if (known.has(n.id)) continue;
+            const important = n.type === 'REQUEST' || n.type === 'APPROVAL';
+            (important ? toast.message : toast.info)(n.title, {
+              description: n.message,
+              duration: important ? 10_000 : 4_000,
             });
           }
+        } catch (err) {
+          console.error('Notification refresh failed:', err);
         }
-      )
-      .subscribe();
+      },
+      { tables: ['notifications'] },
+    );
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [user, pharmacy, fetchNotifications]);
+    return unsubscribe;
+  }, [user, refresh]);
 
-  const persistentAlerts = notifications.filter(n => !n.is_dismissed && (n.type === 'REQUEST' || n.type === 'APPROVAL'));
-  const unreadCount = notifications.filter(n => !n.is_read).length;
+  useEffect(() => {
+    seenIds.current = new Set(notifications.map((n) => n.id));
+  }, [notifications]);
+
+  const persistentAlerts = notifications.filter(
+    (n) => !n.is_dismissed && (n.type === 'REQUEST' || n.type === 'APPROVAL'),
+  );
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
     <NotificationContext.Provider value={{
-      notifications,
-      persistentAlerts,
-      unreadCount,
-      markAsRead,
-      dismissNotification
+      notifications, persistentAlerts, unreadCount,
+      markAsRead, dismissNotification, refresh,
     }}>
       {children}
     </NotificationContext.Provider>

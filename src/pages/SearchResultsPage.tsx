@@ -11,7 +11,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Map as MapIcon, List, BookOpen, ChevronDown, ChevronUp, WifiOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { type StockStatus } from '@/components/StockStatusBadge';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -61,24 +61,23 @@ async function fetchNearbyPharmacies(
   userLat: number | null,
   userLng: number | null
 ): Promise<SearchResult[]> {
-  if (!isSupabaseConfigured || !drugQuery.trim()) return [];
+  if (!drugQuery.trim()) return [];
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
 
   try {
-    const { data, error } = await supabase.rpc('find_nearby_pharmacies', {
-      p_query:     drugQuery,
-      p_lat:       userLat,
-      p_lng:       userLng,
-      p_radius_km: 50,
-      p_city:      city,
+    const response = await api.search.drugs({
+      q: drugQuery,
+      lat: userLat ?? undefined,
+      lng: userLng ?? undefined,
+      radius_km: 50,
+      city: city ?? undefined,
     });
 
     clearTimeout(timeout);
-    if (error) throw new Error(error.message);
 
-    return (data || []).map((item: any): SearchResult => ({
+    return response.results.map((item: any): SearchResult => ({
       pharmacy_id:   item.pharmacy_id,
       drug_id:       item.drug_id,
       drug_name:     item.drug_name,
@@ -88,8 +87,8 @@ async function fetchNearbyPharmacies(
       city:          item.city,
       phone:         item.phone ?? '',
       whatsapp_number: item.whatsapp_number ?? '',
-      lat:           item.lat ?? item.latitude ?? 0,
-      lng:           item.lng ?? item.longitude ?? 0,
+      lat:           item.lat ?? 0,
+      lng:           item.lng ?? 0,
       quantity:      item.quantity,
       unit_price:    item.unit_price,
       stock_status:  item.stock_status as StockStatus,

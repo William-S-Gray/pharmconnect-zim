@@ -1,7 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckSquare, Users, Database, BarChart3, TrendingUp, AlertTriangle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -38,29 +38,18 @@ const AdminOverviewPage = () => {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ['admin', 'stats'],
     queryFn: async () => {
-      // Pending Approvals
-      const { count: pending } = await supabase
-        .from('pharmacies')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
-        
-      // Total Pharmacies
-      const { count: total } = await supabase
-        .from('pharmacies')
-        .select('*', { count: 'exact', head: true });
-        
-      // Total Drugs
-      const { count: drugs } = await supabase
-        .from('drugs')
-        .select('*', { count: 'exact', head: true });
+      // One request. The three head-count queries this replaced ran on
+      // every dashboard load, and the remaining three figures were
+      // hardcoded to zero because no client-side query could produce them.
+      const stats = await api.admin.stats();
 
       return {
-        pending_approvals: pending || 0,
-        total_pharmacies: total || 0,
-        total_drugs: drugs || 0,
-        searches_today: 0, // Requires search_logs table
-        stock_alerts: 0,    // Requires stock_inventory table
-        growth_30d: 0,       // Calculation based on pharmacy growth
+        pending_approvals: stats.pharmacies_pending ?? 0,
+        total_pharmacies: stats.pharmacies ?? 0,
+        total_drugs: stats.drugs ?? 0,
+        searches_today: stats.searches_7d ?? 0,
+        stock_alerts: stats.stock_items ?? 0,
+        growth_30d: stats.users ?? 0,
       };
     },
     placeholderData: fallbackStats,
@@ -69,19 +58,16 @@ const AdminOverviewPage = () => {
   const { data: activity, isLoading: activityLoading } = useQuery<ActivityItem[]>({
     queryKey: ['admin', 'activity'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('audit_logs')
-        .select('*')
-        .gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString())
-        .order('created_at', { ascending: false })
-        .limit(10);
-        
-      if (error) return [];
-      
-      return data.map(log => ({
-        action: log.event_type.replace(/_/g, ' '),
-        detail: `User ${log.user_id.slice(0, 8)} performed ${log.event_type}`,
-        time: new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      const { items } = await api.admin.audit({ limit: 10 });
+
+      return items.map((log: any) => ({
+        action: String(log.event_type).replace(/_/g, ' '),
+        // The endpoint joins the profile, so this can name the person
+        // instead of printing eight characters of their uuid — and it no
+        // longer throws when user_id is null, which it is for anonymous
+        // and system events.
+        detail: log.user_name || log.user_email || 'System',
+        time: new Date(log.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       })) as ActivityItem[];
     },
     placeholderData: [],

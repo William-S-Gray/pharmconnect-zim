@@ -1,51 +1,68 @@
 # Google Maps Integration & Security Guide
 
-This document explains how to effectively use and secure Google Maps within the PharmTrack-Zim platform.
+How Google Maps is used and secured in PharmConnect Zim.
 
-## 1. API Key Security (CRITICAL)
+## 1. Two keys, not one
 
-The Google Maps JavaScript API key is used in the frontend to render the interactive map. To prevent unauthorized billing and usage, you **MUST** restrict your API key in the [Google Cloud Console](https://console.cloud.google.com/).
+There are two distinct Google Maps keys, and keeping them separate is the
+whole security model. Sharing one key between both makes the restriction on
+the browser key pointless, because the same value is then valid from
+anywhere.
 
-### Mandatory Restrictions:
-1.  **Website Restrictions (HTTP Referrers)**:
-    - Add `localhost:5173/*` for development.
-    - Add your production domain (e.g., `https://pharmtrack.co.zw/*`).
-2.  **API Restrictions**:
-    - Limit the key to only:
-        - Maps JavaScript API
-        - Places API
-        - Distance Matrix API
-        - Geocoding API
+| | Where it lives | Restriction |
+|---|---|---|
+| **Browser key** | `.env` → `VITE_GOOGLE_MAPS_API_KEY` | HTTP referrer, **Maps JavaScript API only** |
+| **Server key** | `server/.env` → `GOOGLE_MAPS_API_KEY` | No referrer (server-side), Geocoding + Places + Distance Matrix |
 
-## 2. Server-Side Proxy (Hidden API Key)
+### Why the browser key cannot be hidden
 
-For sensitive operations like **Distance Matrix** and **Reverse Geocoding**, we use a Supabase Edge Function as a proxy. This ensures your API key is never exposed in network logs for these specific calls.
+The Maps JavaScript SDK renders the interactive map inside the page, so its
+key has to be readable by the page. That is unavoidable and it is why the
+referrer restriction matters: it is the only thing stopping the key being
+lifted and billed against this account from someone else's site.
 
-### How it works:
-- Frontend calls `supabase.functions.invoke('google-maps-proxy', { body: { ... } })`.
-- The Edge Function retrieves the API key from its own environment variables.
-- The Edge Function performs the request and returns the result.
+Restrict it in the [Google Cloud Console](https://console.cloud.google.com/):
 
-### Setup Instructions:
-1. Ensure the Supabase CLI is installed.
-2. Run `supabase functions new google-maps-proxy`.
-3. Copy the provided proxy code into `supabase/functions/google-maps-proxy/index.ts`.
-4. Deploy using `supabase functions deploy google-maps-proxy`.
+1. **Website restrictions (HTTP referrers)** — `localhost:8080/*` for
+   development, plus your production domain.
+2. **API restrictions** — *Maps JavaScript API* and nothing else. If this
+   key can also call Geocoding, a referrer spoof gets free geocoding.
 
-## 3. "Find Nearest Pharmacy" Feature
+## 2. Server-side proxy
 
-This feature uses the browser's Geolocation API to find hospitals/clinics near the user.
+Geocoding, place autocomplete and distance lookups never touch the browser
+key. They go through the API server, which holds the unrestricted key:
 
-- **Logic**: It calculates the Haversine distance between the user's coordinates and all approved pharmacies in the database.
-- **SQL Optimization**: Use PostGIS (if enabled) or a simple bounding box query in Supabase for faster performance at scale.
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/maps/geocode?address=` | Address → coordinates (pharmacy registration) |
+| `GET /api/maps/autocomplete?input=` | Address autocomplete |
+| `GET /api/maps/reverse-geocode?lat=&lng=` | Coordinates → address |
+| `GET /api/maps/distance?origin_lat=…` | Driving distance and duration |
 
-## 4. Real-time Distance Calculation
+Only these four operations are exposed. A general pass-through would be an
+open relay to the whole Maps API on this account's bill.
 
-We use the **Google Distance Matrix API** to provide precise driving distances and times.
-- **Trigger**: Calculated when a user clicks on a pharmacy marker.
-- **Fall-back**: Straight-line distance is used as a fallback if the API fails or is restricted.
+Note that these replaced a Supabase Edge Function which the client called
+first and then **fell back to calling Google directly from the browser with
+the key in the URL**. That fallback could never have worked — neither the
+Distance Matrix nor the Geocoding API sends CORS headers — so it failed on
+every request while exposing the key in the attempt. There is no fallback
+in `src/lib/googleMapsProxy.ts` now.
 
-## 5. Rate Limiting & Auth
+## 3. "Find nearest pharmacy"
 
-- **Authentication**: All proxy calls are protected by Supabase Auth. Only logged-in users or legitimate site visitors (via Anon Key) can trigger these calls.
-- **Rate Limiting**: Implemented via Supabase's built-in protections and client-side debouncing (preventing multiple rapid clicks).
+Uses the browser's Geolocation API for the user's position, then
+`GET /api/search?q=…&lat=…&lng=…&radius_km=…`.
+
+The radius filter is `ST_DWithin` against a GIST-indexed `geography`
+column, so it is an index scan. The original computed Haversine distance
+inline in the `WHERE` clause, which no index can serve — every search read
+every approved pharmacy in the country.
+
+## 4. Rate limiting
+
+The maps endpoints are currently unauthenticated and unthrottled beyond
+client-side debouncing. Before launch, put a rate limit on them: they cost
+real money per call, and nothing stops a script hitting
+`/api/maps/geocode` in a loop. See the outstanding items in `MIGRATION.md`.

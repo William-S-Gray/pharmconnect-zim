@@ -1,90 +1,65 @@
-import { supabase } from './supabaseClient';
+import { api } from './api';
 
 /**
- * Log a system activity event to the audit_logs table.
+ * Trash / restore / deletion-request helpers.
+ *
+ * `logActivity()` used to live here, letting any signed-in browser write
+ * arbitrary rows into audit_logs through a SECURITY DEFINER RPC. It has
+ * been removed rather than ported: a client-supplied audit trail records
+ * whatever the client chooses to admit to, which is worth nothing during an
+ * investigation. Every endpoint that changes something now writes its own
+ * entry server-side, inside the same transaction as the change.
  */
-export const logActivity = async (
-  eventType: string, 
-  metadata: any = {}, 
-  userId?: string
-) => {
-  try {
-    const { error } = await supabase.rpc('log_audit_event', {
-      p_event_type: eventType,
-      p_metadata: metadata,
-      p_user_id: userId
-    });
-    if (error) console.error('Failed to log activity:', error);
-  } catch (e) {
-    console.error('Audit logging error:', e);
-  }
-};
 
-/**
- * Initiates a deletion request from a normal user to an admin.
- */
+/** Ask an administrator to delete a pharmacy or your own account. */
 export const requestDeletion = async (
   table: 'profiles' | 'pharmacies',
   id: string,
   reason: string,
-  pharmacyId?: string
-) => {
-  const { data, error } = await supabase.rpc('request_deletion', {
-    p_table: table,
-    p_id: id,
-    p_reason: reason,
-    p_pharmacy_id: pharmacyId
-  });
-  if (error) throw error;
-  return data;
-};
+  pharmacyId?: string,
+) => api.deleteRequests.create({
+  target_table: table,
+  target_id: id,
+  reason,
+  pharmacy_id: pharmacyId,
+});
+
+/** Approve a request, moving the target to trash. Super admin only. */
+export const approveDeletion = async (requestId: string) =>
+  api.admin.decideDeleteRequest(requestId, 'APPROVED');
+
+export const denyDeletion = async (requestId: string) =>
+  api.admin.decideDeleteRequest(requestId, 'DENIED');
 
 /**
- * Approves a deletion request, moving the record to Trash.
- */
-export const approveDeletion = async (requestId: string) => {
-  const { error } = await supabase.rpc('approve_deletion', {
-    p_request_id: requestId
-  });
-  if (error) throw error;
-};
-
-/**
- * Restores a record from Trash, performing dependency checks.
+ * Restore a record from trash.
+ *
+ * The old RPC returned `{ success, error?, parent? }` and callers branched
+ * on it. This throws an ApiError instead, so a failure cannot be silently
+ * ignored by a caller that forgot to check the flag.
  */
 export const restoreRecord = async (table: string, id: string) => {
-  const { data, error } = await supabase.rpc('restore_from_trash', {
-    p_table: table,
-    p_id: id
-  });
-  if (error) throw error;
-  return data; // Returns { success: boolean, error?: string, parent?: string }
+  if (table === 'profiles') return api.admin.restoreUser(id);
+  if (table === 'pharmacies') return api.admin.restorePharmacy(id);
+  throw new Error(`Cannot restore records from ${table}`);
 };
 
 /**
- * Subscribes to real-time delete requests for current pharmacy or global admins.
+ * Watch for new deletion requests.
+ *
+ * Replaces a Supabase realtime channel filtered by pharmacy_id. The SSE
+ * stream is already scoped to what the caller may see, so there is no
+ * client-side filter to get wrong — but the event carries identifiers
+ * only, so the handler refetches rather than reading a row off the wire.
  */
 export const subscribeToDeleteRequests = (
-  pharmacyId: string | undefined, 
-  onNewRequest: (payload: any) => void
-) => {
-  const channel = supabase
-    .channel('delete_requests_realtime')
-    .on(
-      'postgres_changes',
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'delete_requests',
-        filter: pharmacyId ? `pharmacy_id=eq.${pharmacyId}` : undefined
-      },
-      (payload) => {
-        onNewRequest(payload.new);
-      }
-    )
-    .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
-};
+  pharmacyId: string | undefined,
+  onNewRequest: () => void,
+) => api.subscribeToChanges(
+  (event) => {
+    if (event.op !== 'INSERT') return;
+    if (pharmacyId && event.pharmacy_id !== pharmacyId) return;
+    onNewRequest();
+  },
+  { tables: ['delete_requests'] },
+);

@@ -53,7 +53,7 @@ Response formatted + sent back via Twilio
 mkdir pharmconnect-whatsapp-bot
 cd pharmconnect-whatsapp-bot
 npm init -y
-npm install express twilio openai @supabase/supabase-js dotenv
+npm install express twilio openai dotenv
 ```
 
 **`server.js`:**
@@ -61,14 +61,26 @@ npm install express twilio openai @supabase/supabase-js dotenv
 import express from 'express';
 import { twiml } from 'twilio';
 import { OpenAI } from 'openai';
-import { createClient } from '@supabase/supabase-js';
 import 'dotenv/config';
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+
+// Drug availability comes from the PharmConnect API. The search route is
+// public, so this bot needs no credentials at all — it can only read what
+// any visitor to the website could.
+const API_URL = process.env.API_URL ?? 'http://localhost:4000';
+
+async function searchDrugs(query, { city = null, limit = 3 } = {}) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (city) params.set('city', city);
+  const response = await fetch(`${API_URL}/api/search?${params}`);
+  if (!response.ok) throw new Error(`Search failed: HTTP ${response.status}`);
+  const { results } = await response.json();
+  return results;
+}
 
 // ── Symptom → intent mapping (fast pre-filter before AI) ─────────────────
 const QUICK_SYMPTOMS = {
@@ -129,20 +141,16 @@ Return ONLY valid JSON like: {"drug_name":"paracetamol","city":"Harare","intent"
         msg.body(`I detected a health concern. Please describe your symptom more specifically, or ask me to find a specific drug by name.\n\nExample: "find paracetamol in Harare"`);
       }
     } else if (intent === 'find_drug' && drug_name) {
-      // Query Supabase RPC
-      const { data, error } = await supabase.rpc('find_nearby_pharmacies', {
-        p_query: drug_name,
-        p_lat: null,
-        p_lng: null,
-        p_radius_km: 50,
-        p_city: city || 'Harare',
-      });
+      let results = [];
+      try {
+        results = await searchDrugs(drug_name, { city: city || 'Harare', limit: 3 });
+      } catch (err) {
+        console.error('[whatsapp] search failed:', err.message);
+      }
 
-      if (error || !data?.length) {
+      if (results.length === 0) {
         msg.body(`❌ Sorry, I couldn't find *${drug_name}* at pharmacies in ${city} right now.\n\nTry:\n• A different spelling\n• A nearby city\n• Visit pharmconnect.co.zw for more options`);
       } else {
-        // Top 3 results
-        const results = data.slice(0, 3);
         let reply = `✅ *${drug_name}* found at ${results.length} pharmacy${results.length > 1 ? 'ies' : ''} in ${city}:\n\n`;
         results.forEach((r, i) => {
           reply += `*${i + 1}. ${r.pharmacy_name}*\n`;
@@ -177,8 +185,7 @@ app.listen(process.env.PORT || 3000, () => {
 OPENAI_API_KEY=sk-...
 TWILIO_ACCOUNT_SID=AC...
 TWILIO_AUTH_TOKEN=...
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=eyJ...
+API_URL=https://api.your-domain.co.zw
 PORT=3000
 ```
 

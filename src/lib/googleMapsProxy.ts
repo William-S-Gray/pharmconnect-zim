@@ -1,12 +1,19 @@
 /**
- * Google Maps Proxy Utility
- * 
- * This utility provides a secure way to call Google Maps APIs.
- * In production, these calls should be routed through a backend (like Supabase Edge Functions)
- * to hide the API key and implement rate limiting.
+ * Google Maps helpers.
+ *
+ * Every call goes through the API server, which holds the Maps key. The
+ * key is no longer shipped to the browser at all — `VITE_GOOGLE_MAPS_API_KEY`
+ * is gone, because anything in a Vite env var ends up readable in the
+ * bundle and billable against this account.
+ *
+ * The previous version tried a Supabase Edge Function and then fell back to
+ * calling Google straight from the page with the key inlined in the URL.
+ * That fallback could never have worked — neither the Distance Matrix nor
+ * the Geocoding API sends CORS headers — so it failed on every request
+ * while exposing the key in the attempt. There is no fallback here.
  */
 
-import { supabase } from './supabaseClient';
+import { api } from './api';
 
 export interface DistanceMatrixResult {
   distance_text: string;
@@ -15,79 +22,24 @@ export interface DistanceMatrixResult {
   duration_value: number;
 }
 
-/**
- * Calculates the driving distance and duration between two points.
- * Routes through the Supabase 'google-maps-proxy' Edge Function.
- */
+/** Driving distance and duration, or null when there is no route. */
 export async function getDrivingDistance(
   origin: { lat: number; lng: number },
-  destination: { lat: number; lng: number }
+  destination: { lat: number; lng: number },
 ): Promise<DistanceMatrixResult | null> {
   try {
-    // Attempt to use the Edge Function proxy first (Secure)
-    const { data, error } = await supabase.functions.invoke('google-maps-proxy', {
-      body: { 
-        type: 'distance-matrix',
-        origin: `${origin.lat},${origin.lng}`,
-        destination: `${destination.lat},${destination.lng}`
-      }
-    });
-
-    if (!error && data) {
-      return data;
-    }
-
-    // Fallback: Direct call (Only for development, requires API key in .env)
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return null;
-
-    const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${origin.lat},${origin.lng}&destinations=${destination.lat},${destination.lng}&key=${apiKey}`;
-    
-    // Note: This may fail due to CORS if called directly from browser.
-    // This is why the Edge Function proxy is mandatory for production.
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (json.rows?.[0]?.elements?.[0]?.status === 'OK') {
-      const element = json.rows[0].elements[0];
-      return {
-        distance_text: element.distance.text,
-        distance_value: element.distance.value,
-        duration_text: element.duration.text,
-        duration_value: element.duration.value
-      };
-    }
-
-    return null;
+    return await api.maps.drivingDistance(origin, destination);
   } catch (error) {
     console.error('Distance calculation error:', error);
     return null;
   }
 }
 
-/**
- * Performs Reverse Geocoding (GPS -> Address)
- */
+/** Coordinates to a human-readable address, or null. */
 export async function reverseGeocode(lat: number, lng: number): Promise<string | null> {
   try {
-    const { data, error } = await supabase.functions.invoke('google-maps-proxy', {
-      body: { type: 'reverse-geocode', lat, lng }
-    });
-
-    if (!error && data?.address) return data.address;
-
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
-    if (!apiKey) return null;
-
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}`;
-    const response = await fetch(url);
-    const json = await response.json();
-
-    if (json.results?.[0]) {
-      return json.results[0].formatted_address;
-    }
-
-    return null;
+    const { address } = await api.maps.reverseGeocode(lat, lng);
+    return address;
   } catch (error) {
     console.error('Reverse geocoding error:', error);
     return null;

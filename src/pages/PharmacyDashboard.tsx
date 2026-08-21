@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { getCATGreeting, formatCATTime } from '@/lib/catTime';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -32,81 +32,13 @@ const PharmacyDashboard = () => {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['dashboard-stats', pharmacy?.id],
     queryFn: async () => {
-      if (!isSupabaseConfigured || !pharmacy?.id) return null;
-      
-      // Fetch all stats in parallel for speed
-      const [totalRes, stockRes, trendingRes, cityCountRes] = await Promise.all([
-        // 1. Total Drugs Listed
-        supabase
-          .from('pharmacy_stock')
-          .select('*', { count: 'exact', head: true })
-          .eq('pharmacy_id', pharmacy.id),
-
-        // 2. Low Stock Items
-        supabase
-          .from('pharmacy_stock')
-          .select(`
-            quantity, 
-            threshold,
-            drugs!drug_id (
-              generic_name,
-              common_name,
-              strength,
-              form
-            )
-          `)
-          .eq('pharmacy_id', pharmacy.id),
-
-        // 3. System-wide Trending Searches
-        supabase
-          .from('drug_searches')
-          .select('query, result_count')
-          .eq('city', pharmacy.city)
-          .order('created_at', { ascending: false })
-          .limit(30),
-
-        // 4. Searches this month in this city
-        supabase
-          .from('drug_searches')
-          .select('*', { count: 'exact', head: true })
-          .eq('city', pharmacy.city)
-      ]);
-
-      const totalCount = totalRes.count || 0;
-      const stockItems = stockRes.data || [];
-      const lowStockCount = stockItems.filter(s => s.quantity <= s.threshold).length;
-      const trending = trendingRes.data || [];
-      const searchesInCity = cityCountRes.count || 0;
-
-      // Aggregate trending queries
-      const queryCounts: Record<string, number> = {};
-      trending.forEach(t => {
-        queryCounts[t.query] = (queryCounts[t.query] || 0) + 1;
-      });
-
-      const topSearchedDrugs = Object.entries(queryCounts)
-        .map(([query, count]) => ({ common_name: query, search_count: count }))
-        .sort((a, b) => b.search_count - a.search_count)
-        .slice(0, 5);
-
-      return {
-        searches_this_month: searchesInCity,
-        stock: { total: totalCount, low_stock: lowStockCount },
-        plan_tier: pharmacy.plan_tier,
-        top_searched_drugs: topSearchedDrugs,
-        recent_alerts: (stockItems || [])
-          .filter(s => s.quantity <= s.threshold)
-          .map(s => ({
-            common_name: s.drugs?.common_name || s.drugs?.generic_name,
-            strength: s.drugs?.strength,
-            quantity: s.quantity,
-            threshold: s.threshold,
-          }))
-          .sort((a, b) => a.quantity - b.quantity)
-          .slice(0, 5)
-      };
+      if (!pharmacy?.id) return null;
+      // One request. Trending searches are ranked across the whole month
+      // in SQL; the version this replaces pulled the last 30 raw rows and
+      // counted them in the browser, so "top searched" was a sample of 30.
+      return api.pharmacies.dashboard(pharmacy.id);
     },
-    enabled: !!pharmacy?.id && isSupabaseConfigured,
+    enabled: !!pharmacy?.id,
   });
 
   if (isLoading) {

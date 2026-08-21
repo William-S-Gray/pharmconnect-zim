@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,28 +19,17 @@ const PharmacyRequestsPage = () => {
     queryKey: ['drug-requests', pharmacy?.id],
     queryFn: async () => {
       if (!pharmacy?.id) return [];
-      const { data, error } = await supabase
-        .from('drug_requests')
-        .select(`
-          *,
-          drug:drugs (generic_name, common_name, brand_names, strength, form)
-        `)
-        .eq('pharmacy_id', pharmacy.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data;
+      // The endpoint joins the catalogue and returns generic_name /
+      // common_name / strength flat on the row.
+      const { items } = await api.requests.list(pharmacy.id, { limit: 200 });
+      return items;
     },
     enabled: !!pharmacy?.id,
   });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: any) => {
-      const { error } = await supabase
-        .from('drug_requests')
-        .update({ status })
-        .eq('id', id);
-      if (error) throw error;
+      await api.requests.update(pharmacy!.id, id, status);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drug-requests'] });

@@ -1,108 +1,47 @@
-import { createClient } from '@supabase/supabase-js';
-import { supabase } from './supabaseClient';
-import { UserRole } from '@/context/AuthContext';
+import { api } from './api';
+import type { UserRole } from './api';
 
 /**
- * Creates a completely isolated Supabase client for background operations
- * (user provisioning) that will NOT interfere with the main user session.
+ * Administrative user provisioning.
  *
- * Key settings:
- * - persistSession: false  — no localStorage writes
- * - autoRefreshToken: false — won't compete for token refresh
- * - lock: no-op           — CRITICAL: bypasses Navigator Locks API entirely,
- *                           preventing the "lock stolen" error on the main client
+ * The previous implementation built a *second*, ephemeral Supabase client
+ * in the browser — with `persistSession: false` and a no-op Navigator Locks
+ * shim — purely so that signing a colleague up would not overwrite the
+ * admin's own session, and so the two clients would not fight over token
+ * refresh. All of that machinery existed to work around doing account
+ * creation client-side.
+ *
+ * It is one server call now. The admin's session is a cookie this request
+ * never touches, so there is nothing to isolate.
  */
-const createEphemeralClient = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!url || !key) throw new Error('Supabase credentials missing.');
-
-  return createClient(url, key, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      storageKey: `pharmconnect-bg-${Math.random().toString(36).slice(2)}`,
-      // Bypass Navigator Locks entirely — this ephemeral client has no
-      // long-lived session to protect, so no locking is needed.
-      lock: async (_name: string, _timeout: number, fn: () => Promise<any>) => fn(),
-    },
-  });
-};
 
 export const createStaffUser = async (
   email: string,
   password: string,
   fullName: string,
   role: UserRole,
-  pharmacyId?: string
-) => {
-  const bgClient = createEphemeralClient();
-
-  // 1. Pre-check: Does a profile already exist with this email?
-  const { data: existingProfile } = await supabase
-    .from('profiles')
-    .select('id, lifecycle_status, email')
-    .ilike('email', email)
-    .maybeSingle();
-
-  if (existingProfile) {
-    if (existingProfile.lifecycle_status === 'TRASHED') {
-      throw new Error(`A user with the email ${email} is currently in the System Trash. Please restore or permanently purge them from the Trash page before recreating.`);
-    }
-    throw new Error(`An active user with the email ${email} already exists.`);
-  }
-
-  // 2. Create the user in Auth
-  const { data: signUpData, error: signUpError } = await bgClient.auth.signUp({
+  pharmacyId?: string,
+): Promise<string> => {
+  const created = await api.admin.createUser({
     email,
     password,
-    options: {
-      data: { name: fullName },
-    },
+    full_name: fullName,
+    // The role this person holds at the pharmacy. `global_role` stays at
+    // the default: granting someone super_admin is a separate, deliberate
+    // act through the role endpoint, not a side effect of adding staff.
+    pharmacy_id: pharmacyId,
+    pharmacy_role: role === 'super_admin' ? 'pharmacy_admin' : role,
   });
-
-  if (signUpError) throw signUpError;
-
-  if (!signUpData.user?.id) {
-    throw new Error('Failed to create auth record — no user ID returned.');
-  }
-
-  const newUserId = signUpData.user.id;
-
-  // Insert membership linking the new user to the pharmacy (if provided)
-  if (pharmacyId) {
-    const { error: membershipError } = await supabase.from('memberships').insert({
-      user_id: newUserId,
-      pharmacy_id: pharmacyId,
-      role: role,
-    });
-
-    if (membershipError) {
-      throw new Error('User was created but pharmacy assignment failed: ' + membershipError.message);
-    }
-  }
-
-  // Upsert profile row to ensure it exists and has the correct role/name
-  await supabase
-    .from('profiles')
-    .upsert({ 
-      id: newUserId, 
-      email: email, 
-      global_role: role, 
-      full_name: fullName 
-    }, { onConflict: 'id' });
-
-  return newUserId;
+  return created.id;
 };
 
 /**
- * Sends a Supabase password reset email to the given address.
- * The user clicks the link and lands on /reset-password to set a new password.
+ * Sends a password reset email.
+ *
+ * Always resolves, whether or not the address has an account — the server
+ * deliberately gives the same answer either way, so this cannot be used to
+ * discover which addresses are registered.
  */
 export const sendPasswordResetEmail = async (email: string): Promise<void> => {
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/reset-password`,
-  });
-  if (error) throw error;
+  await api.auth.forgotPassword(email);
 };

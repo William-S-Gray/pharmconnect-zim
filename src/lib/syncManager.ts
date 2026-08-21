@@ -1,11 +1,29 @@
-import { supabase } from './supabaseClient';
 import { toast } from 'sonner';
+import { api, ApiError } from './api';
+
+/**
+ * Offline write queue for stock edits.
+ *
+ * Pharmacies in Zimbabwe lose connectivity routinely, so edits made offline
+ * are queued locally and replayed when the connection returns.
+ *
+ * Scoped to `pharmacy_stock` deliberately. The previous version took a
+ * table name and issued `supabase.from(op.table)` against it, which read as
+ * general-purpose but was only ever called with 'pharmacy_stock' — and
+ * could not have worked for anything else, because conflict detection
+ * assumed an `updated_at` column and an `id` primary key. Narrowing it to
+ * the one real case removes a general mechanism nobody could safely use.
+ *
+ * Conflicts are never resolved automatically. If the server row changed
+ * while an edit sat in the queue, both versions go to an administrator:
+ * silently overwriting a colleague's stock correction with a stale count is
+ * worse than asking.
+ */
 
 export type SyncOperation = {
   id: string;
-  table: string;
   type: 'INSERT' | 'UPDATE' | 'DELETE';
-  data: any;
+  data: Record<string, unknown> & { id?: string };
   timestamp: number;
   retryCount: number;
   userId?: string;
@@ -13,7 +31,7 @@ export type SyncOperation = {
 };
 
 const QUEUE_KEY = 'pharmconnect_sync_queue';
-const CONFLICT_KEY = 'pharmconnect_sync_conflicts';
+const MAX_RETRIES = 5;
 
 class SyncManager {
   private queue: SyncOperation[] = [];
@@ -23,30 +41,36 @@ class SyncManager {
     this.loadQueue();
     if (typeof window !== 'undefined') {
       window.addEventListener('online', () => this.sync());
-      // Check every 2 minutes as backup
-      setInterval(() => this.sync(), 120000);
+      setInterval(() => this.sync(), 120_000);
     }
   }
 
   private loadQueue() {
-    const saved = localStorage.getItem(QUEUE_KEY);
-    if (saved) {
-      try {
-        this.queue = JSON.parse(saved);
-      } catch (e) {
-        this.queue = [];
-      }
+    try {
+      this.queue = JSON.parse(localStorage.getItem(QUEUE_KEY) ?? '[]');
+    } catch {
+      // Corrupt queue: better to lose unsynced edits than to wedge the app
+      // on every load trying to parse them.
+      this.queue = [];
     }
   }
 
   private saveQueue() {
-    localStorage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
+    try {
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(this.queue));
+    } catch (err) {
+      console.error('[sync] could not persist queue', err);
+    }
   }
 
-  enqueue(table: string, type: 'INSERT' | 'UPDATE' | 'DELETE', data: any, context?: { userId?: string, pharmacyId?: string }) {
+  enqueue(
+    _table: 'pharmacy_stock',
+    type: SyncOperation['type'],
+    data: Record<string, unknown> & { id?: string },
+    context?: { userId?: string; pharmacyId?: string },
+  ) {
     const op: SyncOperation = {
       id: crypto.randomUUID(),
-      table,
       type,
       data,
       timestamp: Date.now(),
@@ -61,7 +85,7 @@ class SyncManager {
       this.sync();
     } else {
       toast.info('Working offline. Changes will sync when connection returns.', {
-        description: `Stored ${this.queue.length} pending changes.`
+        description: `Stored ${this.queue.length} pending change${this.queue.length === 1 ? '' : 's'}.`,
       });
     }
   }
@@ -71,38 +95,45 @@ class SyncManager {
 
     this.isSyncing = true;
     const toastId = toast.loading('Synchronizing data...');
-    
-    let processedCount = 0;
-    const failedOps: SyncOperation[] = [];
+    let processed = 0;
+    const retry: SyncOperation[] = [];
 
     for (const op of [...this.queue]) {
       try {
-        const success = await this.processOperation(op);
-        if (success) {
-          processedCount++;
-          this.queue = this.queue.filter(q => q.id !== op.id);
+        await this.processOperation(op);
+        processed += 1;
+      } catch (err) {
+        // A rejected write is a decision, not a transport failure: retrying
+        // it will fail identically every time and would block the queue
+        // forever. Surface it and drop it.
+        const permanent = err instanceof ApiError
+          && err.status >= 400 && err.status < 500 && err.status !== 429;
+
+        if (permanent) {
+          await this.reportConflict(op, { error: (err as ApiError).message });
+          toast.error('A queued change was rejected', {
+            description: (err as ApiError).message,
+            duration: 10_000,
+          });
         } else {
-          // Conflict handled inside processOperation
-          this.queue = this.queue.filter(q => q.id !== op.id);
-        }
-      } catch (error: any) {
-        console.error('Sync failed for operation:', op.id, error);
-        op.retryCount++;
-        if (op.retryCount < 5) {
-          failedOps.push(op);
-        } else {
-          // Permanently failed - log to conflicts for manual review
-          await this.logConflict(op, { error: error.message }, 'PERMANENT_FAILURE');
-          this.queue = this.queue.filter(q => q.id !== op.id);
+          op.retryCount += 1;
+          if (op.retryCount < MAX_RETRIES) {
+            retry.push(op);
+          } else {
+            await this.reportConflict(op, { error: 'Exceeded retry limit' });
+          }
         }
       }
+      this.queue = this.queue.filter((q) => q.id !== op.id);
       this.saveQueue();
     }
 
+    this.queue.push(...retry);
+    this.saveQueue();
     this.isSyncing = false;
-    
-    if (processedCount > 0) {
-      toast.success(`Successfully synchronized ${processedCount} changes.`, { id: toastId });
+
+    if (processed > 0) {
+      toast.success(`Synchronized ${processed} change${processed === 1 ? '' : 's'}.`, { id: toastId });
     } else if (this.queue.length === 0) {
       toast.dismiss(toastId);
     } else {
@@ -110,72 +141,60 @@ class SyncManager {
     }
   }
 
-  private async processOperation(op: SyncOperation): Promise<boolean> {
-    if (op.type === 'UPDATE' || op.type === 'DELETE') {
-      // Conflict detection for updates/deletes
-      const { data: serverRecord, error: fetchError } = await supabase
-        .from(op.table)
-        .select('*')
-        .eq('id', op.data.id)
-        .single();
+  private async processOperation(op: SyncOperation) {
+    const pharmacyId = op.pharmacyId;
+    if (!pharmacyId) throw new ApiError(400, 'Queued change has no pharmacy');
 
-      if (fetchError && fetchError.code !== 'PGRST116') throw fetchError;
+    if (op.type === 'INSERT') {
+      await api.stock.create(pharmacyId, op.data);
+      return;
+    }
 
-      if (serverRecord) {
-        // Check if server version is newer than when we queued the change
-        const serverUpdatedAt = new Date(serverRecord.updated_at).getTime();
-        const localQueuedAt = op.timestamp;
+    const stockId = op.data.id;
+    if (!stockId) throw new ApiError(400, 'Queued change has no record id');
 
-        if (serverUpdatedAt > localQueuedAt) {
-          await this.handleConflict(op, serverRecord);
-          return false;
-        }
+    if (op.type === 'DELETE') {
+      await api.stock.remove(pharmacyId, stockId);
+      return;
+    }
+
+    // UPDATE. Check whether the server row moved while this sat in the
+    // queue; if it did, the two versions go to an admin rather than one
+    // silently winning.
+    const current = await api.stock.list(pharmacyId, { limit: 200 });
+    const serverRow = current.items.find((item) => item.id === stockId);
+
+    if (serverRow) {
+      const serverUpdated = new Date(serverRow.updated_at ?? 0).getTime();
+
+      if (serverUpdated > op.timestamp) {
+        await this.reportConflict(op, serverRow as unknown as Record<string, unknown>);
+        toast.error('Sync conflict detected', {
+          description: 'This item changed on another device. An administrator will resolve it.',
+          duration: 10_000,
+        });
+        return;
       }
     }
 
-    // Apply change
-    let error;
-    if (op.type === 'INSERT') {
-      ({ error } = await supabase.from(op.table).insert(op.data));
-    } else if (op.type === 'UPDATE') {
-      ({ error } = await supabase.from(op.table).update(op.data).eq('id', op.data.id));
-    } else if (op.type === 'DELETE') {
-      ({ error } = await supabase.from(op.table).delete().eq('id', op.data.id));
-    }
-
-    if (error) throw error;
-    return true;
+    const { id: _ignored, ...changes } = op.data;
+    await api.stock.update(pharmacyId, stockId, changes);
   }
 
-  private async handleConflict(op: SyncOperation, serverRecord: any) {
-    console.warn('Data conflict detected for', op.table, op.data.id);
-    
-    // Log to Supabase for admin review
-    await this.logConflict(op, serverRecord, 'DATA_CONFLICT');
-
-    toast.error('Sync Conflict Detected', {
-      description: `A change to ${op.table} was made on another device. An admin has been notified to resolve this conflict.`,
-      duration: 10000,
-    });
-  }
-
-  private async logConflict(op: SyncOperation, serverData: any, reason: string) {
+  private async reportConflict(op: SyncOperation, serverData: Record<string, unknown>) {
+    if (!op.pharmacyId || !op.data.id) return;
     try {
-      await supabase.from('sync_conflicts').insert({
-        table_name: op.table,
-        record_id: op.data.id || (op.type === 'INSERT' ? op.data.id : null),
+      await api.sync.reportConflict({
+        pharmacy_id: op.pharmacyId,
+        table_name: 'pharmacy_stock',
+        record_id: op.data.id,
         local_data: op.data,
         server_data: serverData,
-        status: 'PENDING',
-        user_id: op.userId,
-        pharmacy_id: op.pharmacyId,
       });
-    } catch (e) {
-      console.error('Failed to log conflict to server:', e);
-      // Fallback to local storage for conflicts
-      const localConflicts = JSON.parse(localStorage.getItem(CONFLICT_KEY) || '[]');
-      localConflicts.push({ ...op, serverData, reason, resolved: false });
-      localStorage.setItem(CONFLICT_KEY, JSON.stringify(localConflicts));
+    } catch (err) {
+      // If even the conflict report cannot be filed, say so rather than
+      // stashing it in localStorage where nobody will ever look.
+      console.error('[sync] failed to report conflict', err);
     }
   }
 

@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Pill, Shield, Mail, ArrowLeft, Lock, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { loginSchema } from '@/lib/schemas';
 import { MathCaptcha } from '@/components/MathCaptcha';
 
@@ -73,13 +73,10 @@ const LoginPage = () => {
   const handleGoogleLogin = async () => {
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/dashboard`
-        }
-      });
-      if (error) throw error;
+      // Full-page navigation, not fetch: the OAuth handshake needs the
+      // browser to follow redirects to Google and back, and the server sets
+      // the session cookie on the way through.
+      window.location.href = api.auth.googleSignInUrl();
     } catch (error: any) {
       toast.error(error.message);
       setIsLoading(false);
@@ -129,10 +126,7 @@ const LoginPage = () => {
     }
     try {
       setForgotLoading(true);
-      const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
-        redirectTo: `${window.location.origin}/pharmacy/reset-password`,
-      });
-      if (error) throw error;
+      await api.auth.forgotPassword(forgotEmail);
       setForgotSent(true);
       toast.success('If that email is registered, a reset link has been sent.');
     } catch (error: any) {

@@ -12,12 +12,12 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { logAuditEvent } from '@/lib/auditUtils';
 import { useAuth } from '@/context/AuthContext';
 import { requestDeletion } from '@/lib/lifecycleUtils';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
+import { api } from '@/lib/api';
 import { createStaffUser } from '@/lib/adminAuthUtils';
 
 interface PharmacyUser {
@@ -83,49 +83,24 @@ const AdminPharmaciesPage = () => {
   const { data: users = [], isLoading } = useQuery<PharmacyUser[]>({
     queryKey: ['admin', 'pharmacies', statusFilter, planFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('pharmacies')
-        .select('*');
-      
-      if (statusFilter !== 'ALL') query = query.eq('status', statusFilter);
-      if (planFilter !== 'ALL') query = query.eq('plan_tier', planFilter);
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      // Fetch drug counts for each pharmacy
-      const { data: stockCounts } = await supabase
-        .from('pharmacy_stock')
-        .select('pharmacy_id');
-        
-      const counts: Record<string, number> = {};
-      stockCounts?.forEach(s => {
-        counts[s.pharmacy_id] = (counts[s.pharmacy_id] || 0) + 1;
+      // drug_count is counted per pharmacy in SQL. This previously
+      // downloaded every pharmacy_stock row in the system on each load
+      // just to tally them by pharmacy_id in the browser.
+      const { items } = await api.pharmacies.list({
+        status: statusFilter === 'ALL' ? undefined : statusFilter,
+        limit: 200,
       });
 
-      return (data || []).map(p => ({
-        ...p,
-        drug_count: counts[p.id] || 0,
-        joined: p.created_at
-      })) as PharmacyUser[];
+      return items
+        .filter((p: any) => planFilter === 'ALL' || p.plan_tier === planFilter)
+        .map((p: any) => ({ ...p, drug_count: p.drug_count ?? 0, joined: p.created_at })) as PharmacyUser[];
     },
   });
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status, name, email }: { id: string; status: string; name: string; email: string }) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({ status })
-        .eq('id', id);
-      if (error) throw error;
-
-      await logAuditEvent({
-        action: (status === 'APPROVED' ? 'approve' : status === 'REJECTED' ? 'reject' : 'update') as any,
-        category: 'user_mgmt',
-        target: name,
-        detail: `Pharmacy ${name} (${email}) status updated to ${status}`,
-        metadata: { pharmacy_id: id, status }
-      });
+      // Audited server-side inside the same request.
+      await api.admin.setPharmacyStatus(id, status);
     },
     onMutate: async (vars) => {
       await queryClient.cancelQueries({ queryKey: ['admin', 'pharmacies'] });
@@ -147,11 +122,7 @@ const AdminPharmaciesPage = () => {
 
   const changePlanMutation = useMutation({
     mutationFn: async ({ id, plan_tier }: { id: string; plan_tier: string }) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({ plan_tier })
-        .eq('id', id);
-      if (error) throw error;
+      await api.admin.setPharmacyPlan(id, plan_tier);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
@@ -167,26 +138,24 @@ const AdminPharmaciesPage = () => {
          throw new Error("Pharmacy Name, Admin Email, Admin Name, Password, City, Suburb, and Phone are all required.");
       }
 
-      // Create Pharmacy
-      const { data: newPharmacy, error: pharmacyError } = await supabase
-        .from('pharmacies')
-        .insert({
-           name: data.name,
-           email: data.email || null, // Optional pharmacy email
-           phone: data.phone,
-           city: data.city,
-           suburb: data.suburb,
-           address: data.address,
-           status: data.status,
-           plan_tier: data.plan_tier
-        })
-        .select('id')
-        .single();
-        
-      if (pharmacyError) throw pharmacyError;
-
-      // Create Staff Admin User mapped to this pharmacy
-      await createStaffUser(data.admin_email, data.password, data.admin_name, 'pharmacy_admin', newPharmacy.id);
+      // Pharmacy and its first admin are created in one transaction. Done
+      // as two calls, a failure on the second left an orphaned pharmacy
+      // that nobody could sign in to manage.
+      await api.admin.createPharmacy({
+        name: data.name,
+        email: data.email || data.admin_email,
+        phone: data.phone,
+        city: data.city,
+        suburb: data.suburb,
+        address: data.address,
+        status: data.status,
+        plan_tier: data.plan_tier,
+        admin: {
+          email: data.admin_email,
+          password: data.password,
+          full_name: data.admin_name,
+        },
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
@@ -199,20 +168,19 @@ const AdminPharmaciesPage = () => {
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<UserFormData> }) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          city: data.city,
-          suburb: data.suburb,
-          address: data.address,
-          status: data.status,
-          plan_tier: data.plan_tier
-        })
-        .eq('id', id);
-      if (error) throw error;
+      // status and plan_tier are privileged and have their own endpoints;
+      // they are not accepted here, so this cannot approve a pharmacy or
+      // upgrade its plan as a side effect of an edit.
+      await api.pharmacies.update(id, {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        city: data.city,
+        suburb: data.suburb,
+        address: data.address,
+      } as any);
+      if (data.status) await api.admin.setPharmacyStatus(id, data.status);
+      if (data.plan_tier) await api.admin.setPharmacyPlan(id, data.plan_tier);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
@@ -224,12 +192,7 @@ const AdminPharmaciesPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-       // Direct move to trash for Super Admins
-       const { error } = await supabase
-         .from('pharmacies')
-         .update({ lifecycle_status: 'TRASHED', trashed_at: new Date().toISOString() })
-         .eq('id', id);
-       if (error) throw error;
+       await api.admin.trashPharmacy(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });

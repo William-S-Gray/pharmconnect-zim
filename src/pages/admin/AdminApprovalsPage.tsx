@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -41,16 +41,12 @@ const AdminApprovalsPage = () => {
   const { data: pharmacies = [], isLoading } = useQuery<PendingPharmacy[]>({
     queryKey: ['admin', 'pharmacies', filter],
     queryFn: async () => {
-      let query = supabase
-        .from('pharmacies')
-        .select('*');
-      
-      if (filter !== 'ALL') query = query.eq('status', filter);
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      
-      return (data || []).map(p => ({
+      const { items } = await api.pharmacies.list({
+        status: filter === 'ALL' ? undefined : filter,
+        limit: 200,
+      });
+
+      return items.map((p: any) => ({
         ...p,
         submitted_at: p.created_at // Map created_at to submitted_at for consistency
       })) as PendingPharmacy[];
@@ -59,11 +55,9 @@ const AdminApprovalsPage = () => {
 
   const approveMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({ status: 'APPROVED' })
-        .eq('id', id);
-      if (error) throw error;
+      // Status changes are super-admin only and audited server-side; this
+      // used to be a direct table update from the browser.
+      await api.admin.setPharmacyStatus(id, 'APPROVED');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });
@@ -74,12 +68,10 @@ const AdminApprovalsPage = () => {
 
   const rejectMutation = useMutation({
     mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({ status: 'SUSPENDED' })
-        .eq('id', id);
-      if (error) throw error;
-      // Note: Rejection reason could be logged to an audit table or sent via email here using an Edge Function
+      // REJECTED, not SUSPENDED: they are different states, and conflating
+      // them made a rejected application indistinguishable from a pharmacy
+      // that had been suspended after approval.
+      await api.admin.setPharmacyStatus(id, 'REJECTED');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'pharmacies'] });

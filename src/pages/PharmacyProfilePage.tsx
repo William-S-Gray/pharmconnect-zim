@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
@@ -55,13 +55,9 @@ const PharmacyProfilePage = () => {
         isOpen24h: false,
       });
       setIsLoading(true);
-      supabase
-        .from('pharmacies')
-        .select('*')
-        .eq('id', pharmacy.id)
-        .single()
-        .then(({ data: p, error }) => {
-          if (error) throw error;
+      api.pharmacies
+        .get(pharmacy.id)
+        .then((p: any) => {
           if (p) {
             setForm({
               name: p.name || pharmacy.name || '',
@@ -115,22 +111,17 @@ const PharmacyProfilePage = () => {
     try {
       if (!pharmacy?.id) return;
       setIsSaving(true);
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({
-          name: form.name,
-          address: form.address,
-          suburb: form.suburb,
-          city: form.city,
-          phone: form.phone,
-          whatsapp_number: form.whatsapp_number,
-          mcaz_license: form.mcazLicense,
-          is_open_24h: form.isOpen24h,
-          operating_hours: hours,
-        })
-        .eq('id', pharmacy.id);
-        
-      if (error) throw error;
+      await api.pharmacies.update(pharmacy.id, {
+        name: form.name,
+        address: form.address,
+        suburb: form.suburb,
+        city: form.city,
+        phone: form.phone,
+        whatsapp_number: form.whatsapp_number,
+        mcaz_license: form.mcazLicense,
+        is_open_24h: form.isOpen24h,
+        operating_hours: hours,
+      } as any);
       toast({ title: 'Profile updated', description: 'Your pharmacy details have been saved.' });
     } catch (error: any) {
       toast({ title: 'Error', description: error.message || 'Failed to save profile.' });
@@ -375,10 +366,9 @@ const PharmacyProfilePage = () => {
               if (!isPasswordValid(passwordForm.newPass)) { toast({ title: 'Error', description: 'Password does not meet all requirements' }); return; }
               try {
                 setIsChangingPassword(true);
-                const { error } = await supabase.auth.updateUser({
-                  password: passwordForm.newPass
-                });
-                if (error) throw error;
+                // The current password is now required, so a signed-in
+                // session alone cannot take the account over.
+                await api.auth.changePassword(passwordForm.current, passwordForm.newPass);
                 toast({ title: 'Password changed', description: 'Your password has been updated successfully.' });
                 setPasswordForm({ current: '', newPass: '', confirm: '' });
               } catch (error: any) {

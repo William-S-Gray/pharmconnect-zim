@@ -9,11 +9,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Pill, ArrowLeft, ArrowRight, Eye, EyeOff, CheckCircle2, MapPin, Phone, Building2, User, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
-import { sendNewPharmacyAlert } from '@/lib/emailService';
+import { api } from '@/lib/api';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 import { pharmacyRegisterSchema } from '@/lib/schemas';
-import { GoogleMap, useJsApiLoader, Autocomplete, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, Autocomplete, MarkerF, type Libraries } from '@react-google-maps/api';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +21,10 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+
+// 'places' powers the address autocomplete on this form. The previous code
+// referenced a LIBRARIES constant that was never declared anywhere.
+const GOOGLE_MAPS_LIBRARIES: Libraries = ['places'];
 
 const steps = [
   { id: 1, title: 'Your Pharmacy', icon: Building2 },
@@ -57,7 +60,7 @@ const PharmacyRegisterPage = () => {
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: LIBRARIES,
+    libraries: GOOGLE_MAPS_LIBRARIES,
   });
 
   const onAutocompleteLoad = (autocomplete: google.maps.places.Autocomplete) => {
@@ -141,72 +144,45 @@ const PharmacyRegisterPage = () => {
     
     if (!form.agreedToTerms) { toast.error('You must confirm the legal registration'); return; }
 
-    if (!isSupabaseConfigured) {
-      toast.error('Connection error. Please try again later.');
-      return;
-    }
-
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase.auth.signUp({
+      // Account, profile, pharmacy and membership are created together in
+      // one transaction. The previous flow signed the user up and then
+      // inserted the pharmacy separately, deliberately swallowing a failure
+      // there — which left accounts with no pharmacy and no way to notice.
+      // It also set pharmacies.id to the user's id and wrote latitude /
+      // longitude, neither of which matches the schema.
+      await api.auth.register({
         email: form.email,
         password: form.password,
-        options: {
-          data: {
-            name: form.name,
-            city: form.city,
-            role: 'pharmacy'
-          }
-        }
-      });
-
-      if (error) {
-        if (error.message.toLowerCase().includes('already registered')) {
-          setShowDuplicateModal(true);
-          return;
-        }
-        throw error;
-      }
-      
-      if (data.user && data.user.identities && data.user.identities.length === 0) {
-          setShowDuplicateModal(true);
-          return;
-      }
-
-      if (data.user) {
-        // Create pharmacy record
-        const { error: dbError } = await supabase.from('pharmacies').insert([{
-          id: data.user.id,
+        full_name: form.name,
+        pharmacy: {
           name: form.name,
+          email: form.email,
           address: form.address,
           suburb: form.suburb,
           city: form.city,
           phone: form.phone,
-          email: form.email,
           mcaz_license: form.mcazLicense,
-          latitude: form.lat,
-          longitude: form.lng,
-          status: 'PENDING'
-        }]);
+          lat: form.lat,
+          lng: form.lng,
+        } as any,
+      });
 
-        if (dbError) {
-          console.error('Error creating pharmacy record:', dbError);
-          // We don't throw here to avoid blocking the user if Auth succeeded
-        }
+      // The administrator alert is sent by the server as part of
+      // registration. It used to be fired from here, which meant it only
+      // happened when the client remembered to — and never at all for
+      // anyone registering by any other route.
 
-        // Trigger EmailJS notification for admins
-        try {
-          await sendNewPharmacyAlert(form.name, form.email);
-        } catch (emailErr) {
-          console.error("Failed to send admin email alert:", emailErr);
-          // Don't block registration if email fails
-        }
-
-        toast.success('Registration successful! Please check your email for a confirmation link.');
-        navigate('/login');
-      }
+      toast.success('Registration successful! Your pharmacy is pending approval.');
+      navigate('/dashboard');
     } catch (error: any) {
+      // 409 is the server's "this email already has an account".
+      if (error?.status === 409) {
+        setShowDuplicateModal(true);
+        return;
+      }
       toast.error(error.message || 'Registration failed. Please try again later.');
     } finally {
       setIsLoading(false);
@@ -420,15 +396,7 @@ const PharmacyRegisterPage = () => {
                   variant="outline" 
                   type="button" 
                   className="w-full h-11 flex items-center justify-center gap-3 skeu-inset hover:bg-muted/30"
-                  onClick={async () => {
-                    const { error } = await supabase.auth.signInWithOAuth({
-                      provider: 'google',
-                      options: {
-                        redirectTo: `${window.location.origin}/dashboard`
-                      }
-                    });
-                    if (error) toast.error(error.message);
-                  }}
+                  onClick={() => { window.location.href = api.auth.googleSignInUrl(); }}
                 >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path

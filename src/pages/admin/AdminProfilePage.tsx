@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Shield, User, Lock, Bell, Save } from 'lucide-react';
 
 const AdminProfilePage = () => {
@@ -39,16 +39,11 @@ const AdminProfilePage = () => {
     setIsSaving(true);
     try {
       if (!pharmacy?.id) throw new Error('Not logged in');
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({
-          name: profile.name,
-          phone: profile.phone,
-          email: profile.email
-        })
-        .eq('id', pharmacy.id);
-      
-      if (error) throw error;
+      await api.pharmacies.update(pharmacy.id, {
+        name: profile.name,
+        phone: profile.phone,
+        email: profile.email,
+      });
       toast.success('Profile updated successfully');
     } catch (error: any) {
       toast.error(error.message || 'Failed to update profile');
@@ -62,16 +57,16 @@ const AdminProfilePage = () => {
       toast.error('New passwords do not match');
       return;
     }
-    if (passwords.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (passwords.newPassword.length < 10) {
+      toast.error('Password must be at least 10 characters');
       return;
     }
     setIsChangingPassword(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwords.newPassword
-      });
-      if (error) throw error;
+      // The current password is now required. Supabase's updateUser let a
+      // signed-in session change the password without re-proving it, so a
+      // borrowed unlocked laptop was enough to take the account over.
+      await api.auth.changePassword(passwords.current, passwords.newPassword);
       toast.success('Password changed successfully');
       setPasswords({ current: '', newPassword: '', confirm: '' });
     } catch (error: any) {
@@ -83,14 +78,12 @@ const AdminProfilePage = () => {
 
   const handleSaveNotifications = async () => {
     try {
-      if (!pharmacy?.id) throw new Error('Not logged in');
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({
-          metadata: { ...(pharmacy as any)?.metadata, notifications }
-        })
-        .eq('id', pharmacy.id);
-      if (error) throw error;
+      // These are the signed-in admin's own preferences, so they live on
+      // their profile — not on a pharmacy, and not conflated with the
+      // pharmacy's security-alert toggles, which are a different thing.
+      // The previous code wrote a `metadata` column on pharmacies that no
+      // migration declared, so every save was silently discarded.
+      await api.profile.update({ preferences: { notifications } } as any);
       toast.success('Notification preferences saved');
     } catch (error: any) {
       toast.error(error.message || 'Failed to save notification preferences');

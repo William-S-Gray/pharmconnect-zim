@@ -4,7 +4,7 @@ import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useSearchStore } from '@/stores/searchStore';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 interface Suggestion {
   id: string;
@@ -59,31 +59,29 @@ export function DrugSearchBar({ variant = 'hero', initialQuery = '', onSearch }:
     }
     debounceRef.current = setTimeout(async () => {
       try {
-        const [drugsRes, symptomRes] = await Promise.all([
-          supabase
-            .from('drugs')
-            .select('id, common_name, generic_name, strength, form, category')
-            .or(`common_name.ilike.%${value}%,generic_name.ilike.%${value}%`)
-            .limit(6),
-          isSupabaseConfigured ? supabase.rpc('get_symptom_suggestions', { p_query: value }) : Promise.resolve({ data: null, error: null })
+        const [catalogue, intent] = await Promise.all([
+          api.search.catalogue(value, 6),
+          api.search.intent(value),
         ]);
-        
+
         let newSuggestions: Suggestion[] = [];
-        
-        if (symptomRes.data && symptomRes.data.length > 0 && symptomRes.data[0].symptom_detected) {
-          const s = symptomRes.data[0];
+
+        // A symptom query expands to the drugs that treat it; the server
+        // returns an empty list when the query is already a drug name.
+        if (intent.intent === 'symptom' && intent.suggestions.length > 0) {
           newSuggestions.push({
             id: 'symptom-match',
             type: 'symptom',
-            common_name: s.suggested_drugs ? s.suggested_drugs.join(', ') : 'Suggested treatment',
-            tip: s.tip,
-            suggested_query: s.suggested_query || value,
+            common_name: intent.suggestions.join(', '),
+            tip: `Commonly used for "${value}"`,
+            suggested_query: intent.suggestions[0] ?? value,
           });
         }
-        
-        if (drugsRes.data) {
-          newSuggestions = [...newSuggestions, ...drugsRes.data.map(d => ({ ...d, type: 'drug' as const }))];
-        }
+
+        newSuggestions = [
+          ...newSuggestions,
+          ...catalogue.map((d) => ({ ...d, type: 'drug' as const })),
+        ];
         
         setResults(newSuggestions);
         setIsOpen(newSuggestions.length > 0);

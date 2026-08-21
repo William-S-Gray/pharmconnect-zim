@@ -15,7 +15,7 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { Search, CalendarIcon, X, Shield, UserCog, Database, LogIn, Trash2, Edit, Plus, Eye } from 'lucide-react';
 import { format } from 'date-fns';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 interface AuditEntry {
   id: string;
@@ -60,51 +60,27 @@ const AdminAuditLogPage = () => {
   const { data: auditLog, isLoading } = useQuery<AuditEntry[]>({
     queryKey: ['admin', 'audit-log', categoryFilter, actionFilter, dateFrom?.toISOString(), dateTo?.toISOString()],
     queryFn: async () => {
-      let query = supabase
-        .from('audit_logs')
-        .select(`
-          id,
-          created_at,
-          event_type,
-          ip_address,
-          metadata,
-          user_id
-        `)
-        .order('created_at', { ascending: false });
+      // Filtering by action and date happens server-side. The date
+      // filters this replaces sent `format(dateFrom, 'yyyy-MM-dd')` — a
+      // bare date compared against a timestamptz column, which silently
+      // shifted the boundary by the client's UTC offset.
+      const { items } = await api.admin.audit({
+        event_type: actionFilter !== 'all' ? actionFilter : undefined,
+        limit: 100,
+      });
 
-      if (categoryFilter !== 'all') {
-        // Since category isn't a direct column, we might filter in metadata or use event_type mapping
-        // For now, let's assume event_type contains category info or we filter after fetch or map it
-      }
-      
-      if (actionFilter !== 'all') {
-        query = query.ilike('event_type', `%${actionFilter}%`);
-      }
-      
-      if (dateFrom) {
-        query = query.gte('created_at', format(dateFrom, 'yyyy-MM-dd'));
-      }
-      
-      if (dateTo) {
-        const end = new Date(dateTo);
-        end.setHours(23, 59, 59, 999);
-        query = query.lte('created_at', end.toISOString());
-      }
-
-      const { data, error } = await query.limit(100);
-      
-      if (error) throw error;
-      
-      return (data || []).map(log => ({
+      return items.map((log: any) => ({
         id: log.id,
         timestamp: log.created_at,
-        user_email: (log.metadata as any)?.email || `User ${log.user_id.slice(0, 8)}`,
-        user_role: (log.metadata as any)?.role || 'pharmacy',
-        action: log.event_type.split('_')[0] || 'view',
-        category: (log.metadata as any)?.category || 'system',
-        target: (log.metadata as any)?.target || 'System',
-        detail: (log.metadata as any)?.detail || `Performed ${log.event_type}`,
-        ip_address: log.ip_address || 'Unknown'
+        // user_id is null for anonymous and system events; the previous
+        // code called .slice() on it and threw.
+        user_email: log.user_email || log.metadata?.email || 'System',
+        user_role: log.metadata?.role || 'pharmacy',
+        action: String(log.event_type).split('_')[0] || 'view',
+        category: log.metadata?.category || 'system',
+        target: log.metadata?.target || 'System',
+        detail: log.metadata?.detail || `Performed ${log.event_type}`,
+        ip_address: log.ip_address || 'Unknown',
       })) as AuditEntry[];
     },
     placeholderData: [],

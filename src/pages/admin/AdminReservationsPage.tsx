@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,6 @@ import {
   CheckCircle, XCircle, MessageCircle, RefreshCw,
   ShoppingBag, Search, Filter, Home
 } from 'lucide-react';
-import { logAuditEvent } from '@/lib/auditUtils';
 
 type ReservationStatus = 'PENDING' | 'CONTACTED' | 'FULFILLED' | 'CANCELLED';
 
@@ -51,22 +50,12 @@ const AdminReservationsPage: React.FC = () => {
   const { data: reservations = [], isLoading, refetch } = useQuery<Reservation[]>({
     queryKey: ['admin', 'reservations', statusFilter],
     queryFn: async () => {
-      if (!isSupabaseConfigured) return [];
-      
-      let query = supabase
-        .from('drug_reservations')
-        .select('*, pharmacies(name, city)')
-        .order('created_at', { ascending: false });
-
-      if (statusFilter !== 'ALL') {
-        query = query.eq('status', statusFilter);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data || []) as unknown as Reservation[];
+      const { items } = await api.admin.reservations({
+        status: statusFilter,
+        limit: 200,
+      });
+      return items as unknown as Reservation[];
     },
-    enabled: isSupabaseConfigured,
   });
 
   // ── Filtered data ───────────────────────────────────────────────────────
@@ -80,19 +69,9 @@ const AdminReservationsPage: React.FC = () => {
   // ── Status update mutation ──────────────────────────────────────────────
   const updateMutation = useMutation({
     mutationFn: async ({ id, status, ref, pharmacyName }: { id: string; status: ReservationStatus, ref: string, pharmacyName: string }) => {
-      const { error } = await supabase
-        .from('drug_reservations')
-        .update({ status })
-        .eq('id', id);
-      if (error) throw error;
-
-      await logAuditEvent({
-        action: 'update',
-        category: 'drug_mgmt',
-        target: ref,
-        detail: `Reservation ${ref} for pharmacy ${pharmacyName} marked as ${status}`,
-        metadata: { reservation_id: id, status }
-      });
+      // The audit entry is written server-side inside the same request,
+      // so it cannot be skipped or forged by the client.
+      await api.admin.updateReservation(id, status);
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'reservations'] });

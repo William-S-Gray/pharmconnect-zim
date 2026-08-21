@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -18,22 +18,12 @@ const B2BSupplyIntelligencePage = () => {
   const { data: heatmap = [], isLoading, error } = useQuery<HeatmapEntry[]>({
     queryKey: ['admin', 'b2b-supply-iq'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('b2b_demand_heatmap')
-        .select('*')
-        .order('unfulfilled_demand', { ascending: false })
-        .limit(50);
-      
-      if (error) {
-        console.warn('B2B Heatmap Materialized View not found or empty. Using mock data for demo.');
-        return [
-          { hour_bucket: new Date().toISOString(), city: 'Harare', drug_search: 'Azithromycin', search_volume: 450, unfulfilled_demand: 380 },
-          { hour_bucket: new Date().toISOString(), city: 'Bulawayo', drug_search: 'Insulin Lantus', search_volume: 210, unfulfilled_demand: 195 },
-          { hour_bucket: new Date().toISOString(), city: 'Mutare', drug_search: 'Metformin 500mg', search_volume: 180, unfulfilled_demand: 45 },
-          { hour_bucket: new Date().toISOString(), city: 'Harare', drug_search: 'Amoxicillin', search_volume: 800, unfulfilled_demand: 20 },
-        ];
-      }
-      return data;
+      // Computed from drug_searches. The previous query read a
+      // `b2b_demand_heatmap` materialized view that exists only in
+      // backend-services/b2b-heatmaps.sql and was never applied, so it
+      // always failed — and the catch returned four hardcoded rows that
+      // the page presented under a "Live Demand Data" badge.
+      return api.admin.demand(7);
     },
   });
 

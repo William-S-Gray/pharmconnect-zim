@@ -2,7 +2,7 @@ import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Upload, FileSpreadsheet, AlertCircle, Check } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
@@ -68,10 +68,10 @@ export function ImportModal({ open, onOpenChange, onConfirm }: ImportModalProps)
     setFileName(file.name);
 
     try {
-      // Fetch master drugs for fuzzy matching
-      const { data: masterDrugs } = await supabase
-        .from('drugs')
-        .select('id, generic_name, common_name, brand_names, search_terms');
+      // Master catalogue, for matching spreadsheet rows to known drugs.
+      // Paged rather than unbounded: the old select() pulled every drug on
+      // every file drop.
+      const { items: masterDrugs } = await api.drugs.list({ limit: 200 });
 
       const ext = file.name.split('.').pop()?.toLowerCase();
 

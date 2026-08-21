@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { Pill, LayoutDashboard, CheckSquare, BarChart3, Database, Users, Store, LogOut, Settings, ScrollText, UserCog, Trash2, ShieldAlert, AlertTriangle, ShoppingBag } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -30,31 +30,14 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const { pharmacy, profile, logout } = useAuth();
   
-  const { data: pendingCount = 0 } = useQuery({
-    queryKey: ['admin', 'pending-delete-count'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('delete_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
-      if (error) return 0;
-      return count || 0;
-    },
+  // One request for every badge, rather than one head-count query each.
+  const { data: counts } = useQuery({
+    queryKey: ['admin', 'counts'],
+    queryFn: () => api.admin.counts(),
     refetchInterval: 30000,
   });
-
-  const { data: conflictsCount = 0 } = useQuery({
-    queryKey: ['admin', 'conflicts-count'],
-    queryFn: async () => {
-      const { count, error } = await supabase
-        .from('sync_conflicts')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'PENDING');
-      if (error) return 0;
-      return count || 0;
-    },
-    refetchInterval: 30000,
-  });
+  const pendingCount = counts?.pending_deletes ?? 0;
+  const conflictsCount = counts?.conflicts ?? 0;
 
   const handleLogout = () => {
     logout();
