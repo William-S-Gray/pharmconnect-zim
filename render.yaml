@@ -1,0 +1,92 @@
+# Render blueprint for the PharmConnect API.
+#
+# A persistent process, not a serverless function. The realtime stream
+# holds a long-lived Postgres LISTEN connection open (server/src/routes/
+# events.js) and fans changes out over SSE; a function that is torn down
+# between invocations cannot keep either alive. That constraint is what
+# rules out Vercel/Cloudflare Workers for this service.
+#
+# Deploy:  render blueprint launch     (or connect the repo in the dashboard)
+#
+# Secrets are declared here but NOT valued — `sync: false` means Render
+# prompts for them and stores them itself, so nothing sensitive is
+# committed.
+
+services:
+  - type: web
+    name: pharmconnect-api
+    runtime: node
+    plan: starter          # free tier idles out; SSE clients reconnect, but
+                           # the first request after a sleep is slow
+    region: oregon
+    rootDir: server
+    buildCommand: npm ci
+    startCommand: node src/index.js
+
+    # Render polls this. It checks the database, so a deploy that cannot
+    # reach Neon is reported unhealthy rather than serving 500s.
+    healthCheckPath: /health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Render terminates TLS at its proxy and sets X-Forwarded-For.
+      # Without this the login rate limiter sees the proxy's address for
+      # every request and one attacker's failures throttle everybody.
+      - key: TRUST_PROXY
+        value: "true"
+
+      # Pooled Neon connection string (the -pooler host).
+      - key: DATABASE_URL
+        sync: false
+
+      # Direct, non-pooled connection for the SSE listener. LISTEN/NOTIFY
+      # cannot work through PgBouncer transaction pooling. Leave unset and
+      # the server derives it by removing "-pooler".
+      - key: DATABASE_URL_UNPOOLED
+        sync: false
+
+      # Pepper for password hashing. Generate ONCE and never rotate —
+      # changing it invalidates every stored password.
+      #   node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+      - key: AUTH_SECRET
+        generateValue: true
+
+      # Origins allowed to call the API with a session cookie. This is the
+      # actual gate on who can use it from a browser, so it must list every
+      # front end and nothing else.
+      - key: CORS_ORIGINS
+        sync: false
+
+      # Where password-reset and invitation links point.
+      - key: APP_URL
+        sync: false
+
+      # Server-side Maps key for /api/maps/*. Distinct from the browser
+      # key, which is referrer-restricted and scoped to Maps JavaScript only.
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+
+      # SMTP. Without these, password reset and invitations cannot be
+      # delivered and the server warns loudly at boot.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+      - key: EMAIL_FROM_NAME
+        value: PharmConnect Zim
+
+      # Optional: Google sign-in. The redirect URI must match exactly.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false

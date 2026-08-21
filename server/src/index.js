@@ -37,7 +37,18 @@ app.use(cors({
     // Same-origin and server-to-server callers send no Origin header.
     if (!origin) return callback(null, true);
     if (env.corsOrigins.includes(origin)) return callback(null, true);
-    callback(new Error(`Origin not allowed: ${origin}`));
+
+    // Refuse by omitting the Access-Control-Allow-Origin header, which is
+    // what actually stops a browser using the response. Passing an Error
+    // here instead sent it to the error handler, which logged a stack
+    // trace and answered 500 — turning every stray bot request with an
+    // Origin header into a server error in the logs.
+    //
+    // Note this is defence in depth, not the auth boundary: CORS is
+    // enforced by browsers, and a non-browser client ignores it entirely.
+    // The session cookie is what actually gates access.
+    if (!env.isProd) console.warn(`[cors] refused origin: ${origin}`);
+    return callback(null, false);
   },
   // Required for the session cookie to travel cross-origin at all.
   credentials: true,
