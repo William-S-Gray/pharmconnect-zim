@@ -81,10 +81,24 @@ redeploy, not just a restart.
 
 ---
 
+## Health endpoints
+
+| Path | Checks | Use for |
+|---|---|---|
+| `/health` | the process is alive | platform restart probe |
+| `/health/ready` | the process **and** Postgres | monitoring, deploy gates |
+
+Keep the restart probe on `/health`. Pointing it at `/health/ready`
+couples the instance's survival to the database being warm: on a stack
+where both the host and Neon idle, a cold database makes the check slow,
+the platform cycles the instance, and the service flaps between healthy
+and unroutable with nothing actually wrong.
+
 ## Verifying the cutover
 
 ```bash
 curl https://<api>/health                      # {"ok":true}
+curl https://<api>/health/ready                # {"ok":true,"database":"reachable"}
 curl 'https://<api>/api/search?q=paracetamol'  # results, no auth needed
 ```
 

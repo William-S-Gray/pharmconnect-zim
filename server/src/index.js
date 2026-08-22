@@ -64,14 +64,31 @@ app.use(cookieParser());
 // user without requiring one.
 app.use(attachUser);
 
-app.get('/health', async (_req, res) => {
+/**
+ * Liveness. Deliberately does NOT touch the database.
+ *
+ * This is what the platform polls to decide whether to restart the
+ * instance, so it must answer the question "is this process alive" and
+ * nothing else. The previous version ran SELECT 1, which coupled the
+ * process's survival to the database being warm — and on a stack where
+ * both Render and Neon idle, a cold database made the check slow, Render
+ * cycled the instance, and the service flapped between 200 and no-server
+ * without anything actually being wrong with it.
+ */
+app.get('/health', (_req, res) => res.json({ ok: true }));
+
+/**
+ * Readiness. Checks the things a request actually needs.
+ *
+ * Use this for "should traffic go here", monitoring and deploy gates —
+ * not as a restart trigger.
+ */
+app.get('/health/ready', async (_req, res) => {
   try {
     await pool.query('SELECT 1');
-    res.json({ ok: true });
-  } catch (err) {
-    // Report unhealthy rather than throwing: this endpoint exists to tell
-    // a load balancer to stop sending traffic here.
-    res.status(503).json({ ok: false, error: 'database unreachable' });
+    res.json({ ok: true, database: 'reachable' });
+  } catch {
+    res.status(503).json({ ok: false, database: 'unreachable' });
   }
 });
 

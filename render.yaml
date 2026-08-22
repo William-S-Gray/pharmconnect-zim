@@ -27,8 +27,10 @@ services:
     buildCommand: npm ci
     startCommand: node src/index.js
 
-    # Render polls this. It checks the database, so a deploy that cannot
-    # reach Neon is reported unhealthy rather than serving 500s.
+    # Liveness only — this path does not touch the database. Render
+    # restarts the instance when it fails, so it must not depend on
+    # anything that can be transiently slow. /health/ready is the one that
+    # checks Postgres; use that for monitoring, not as a restart trigger.
     healthCheckPath: /health
 
     envVars:
