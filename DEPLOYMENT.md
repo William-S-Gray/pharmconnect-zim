@@ -76,6 +76,18 @@ DATABASE_URL='...' node db/seed-catalogue.js
 `vercel.json` at the repo root sets the build, the SPA rewrite and cache
 headers. `.vercelignore` keeps `server/` out of the frontend build.
 
+**`vercel.json` accepts no comments.** It is validated against a strict
+schema that rejects additional properties, so the `"//"` key that works in
+`package.json` fails the deploy with *"should NOT have additional
+property"*. What each block is for:
+
+| Block | Why |
+|---|---|
+| `rewrites` | Client-side routing — an unmatched path serves the SPA shell so `/dashboard/stock` does not 404 on refresh. The negative lookahead keeps `/assets/` and `/api/` out of it. |
+| `Cache-Control` on `/assets/(.*)` | Vite fingerprints these filenames, so a URL's contents never change and it is safe to cache forever. |
+| `Cache-Control` on `/index.html` | Must never be cached, or a deploy leaves browsers loading a shell that references bundles which no longer exist. |
+| `Permissions-Policy` | The app asks for geolocation to find nearby pharmacies; everything else is denied. |
+
 | Variable | Value |
 |---|---|
 | `VITE_API_URL` | The Render API URL, no trailing slash |
