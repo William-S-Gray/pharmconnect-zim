@@ -13,7 +13,31 @@
  * set on every call.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+/**
+ * Where the API lives.
+ *
+ * The localhost fallback is for development only, and is deliberately not
+ * available in a production build. It shipped to a live site once already:
+ * `VITE_API_URL` was unset when the host built, the bundle silently fell
+ * back to localhost, and every request failed on a page that otherwise
+ * looked fine. Failing the build is loud; a silent fallback is not.
+ *
+ * Vite inlines these at build time, so changing the variable requires a
+ * rebuild, not a restart.
+ */
+const BASE_URL: string = (() => {
+  const configured = import.meta.env.VITE_API_URL;
+  if (configured) return String(configured).replace(/\/$/, '');
+
+  if (import.meta.env.PROD) {
+    throw new Error(
+      'VITE_API_URL is not set. A production build must be given the API URL ' +
+      'at build time — there is no sane default, and falling back to localhost ' +
+      'ships a site where every request fails.',
+    );
+  }
+  return 'http://localhost:4000';
+})();
 
 export class ApiError extends Error {
   status: number;
