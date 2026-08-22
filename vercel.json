@@ -1,0 +1,45 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci",
+
+  "rewrites": [
+    {
+      "//": "Client-side routing: every unmatched path serves the SPA shell so a deep link like /dashboard/stock does not 404 on refresh. Static files under /assets are served before rewrites apply, so this does not shadow the bundle.",
+      "source": "/((?!assets/|api/).*)",
+      "destination": "/index.html"
+    }
+  ],
+
+  "headers": [
+    {
+      "//": "Vite fingerprints these filenames, so a given URL's contents never change and it is safe to cache them permanently.",
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    },
+    {
+      "//": "The shell must never be cached, or a deploy leaves browsers loading an index.html that references bundles which no longer exist.",
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        {
+          "//": "The app requests geolocation to find nearby pharmacies; everything else is denied.",
+          "key": "Permissions-Policy",
+          "value": "geolocation=(self), camera=(), microphone=(), payment=()"
+        }
+      ]
+    }
+  ]
+}

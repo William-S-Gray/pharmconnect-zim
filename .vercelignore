@@ -1,0 +1,12 @@
+# The API is deployed to Render, not Vercel — it needs a persistent process
+# for the Postgres LISTEN connection behind the SSE stream. Excluding it
+# keeps the frontend build from pulling in a second package.json.
+server/
+backend-services/
+pos-sync-agent/
+render.yaml
+
+# Docs and local artifacts
+*.md
+!README.md
+dist/

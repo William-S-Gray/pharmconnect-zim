@@ -1,29 +1,33 @@
 # Deployment
 
-Two pieces: a static frontend on Netlify, and the API as a **persistent
-process** elsewhere.
+Three pieces:
 
-The API cannot be serverless. `server/src/routes/events.js` holds a
-long-lived Postgres `LISTEN` connection open and fans changes out over
-SSE — a function torn down between invocations keeps neither alive. That
-rules out Vercel Functions and Cloudflare Workers for this service.
-`render.yaml` in the repo root configures Render; Fly, Railway or any
-container host works the same way.
+| Piece | Where | Why |
+|---|---|---|
+| Frontend (Vite SPA) | **Vercel** | static build, `vercel.json` at the repo root |
+| API | **Render** | needs a persistent process — see below |
+| Database | **Neon** | Postgres 18 with PostGIS, pg_trgm, h3 |
+
+**The API cannot live on Vercel**, which is why the split exists.
+`server/src/routes/events.js` holds a long-lived Postgres `LISTEN`
+connection open and fans changes out over SSE; a function torn down
+between invocations keeps neither alive. `render.yaml` configures a
+persistent process. The frontend is static, so Vercel suits it fine.
 
 ---
 
 ## Order matters
 
 `main` currently expects Supabase. Merging the migration switches the
-frontend to `VITE_API_URL`, which is compiled into the bundle at build
-time — so if that variable is unset when Netlify builds, the live site
-ships pointing at `http://localhost:4000` and every request fails.
+frontend to `VITE_API_URL`, which is compiled into the bundle **at build
+time** — so if it is unset when Vercel builds, the live site ships
+pointing at `http://localhost:4000` and every request fails.
 
 Deploy in this order:
 
-1. **Host the API** and confirm `/health` returns `{"ok":true}`.
-2. **Set `VITE_API_URL`** in *both* Netlify sites.
-3. **Set `CORS_ORIGINS`** on the API to the Netlify origins.
+1. **Host the API** on Render; confirm `/health` returns `{"ok":true}`.
+2. **Set `VITE_API_URL`** on the Vercel project.
+3. **Set `CORS_ORIGINS`** on the API to the Vercel origin.
 4. **Merge**, then confirm the deployed site talks to Neon.
 5. Only then retire Supabase — pause it first, delete later.
 
@@ -67,17 +71,22 @@ DATABASE_URL='...' node db/seed-catalogue.js
 
 ---
 
-## 2. Frontend
+## 2. Frontend (Vercel)
 
-Netlify already builds from `netlify.toml`. Add to **both** sites:
+`vercel.json` at the repo root sets the build, the SPA rewrite and cache
+headers. `.vercelignore` keeps `server/` out of the frontend build.
 
 | Variable | Value |
 |---|---|
-| `VITE_API_URL` | The API's HTTPS URL, no trailing slash |
+| `VITE_API_URL` | The Render API URL, no trailing slash |
 | `VITE_GOOGLE_MAPS_API_KEY` | Browser key — restrict by HTTP referrer, scope to **Maps JavaScript API only** |
 
 `VITE_*` variables are baked in at build time, so changing one needs a
-redeploy, not just a restart.
+**redeploy**, not just a restart. Setting the variable alone changes
+nothing until the next build.
+
+Set them for Production *and* Preview, or preview deployments silently
+fall back to `localhost:4000`.
 
 ---
 
@@ -113,10 +122,15 @@ instead.
 
 ## Gotchas that will cost you an afternoon
 
-- **Cookies are cross-site.** The API and frontend are on different
-  domains, so sessions rely on `SameSite=None; Secure`. Both sides must be
-  HTTPS, and `CORS_ORIGINS` must match the frontend origin exactly —
-  scheme included, no trailing slash.
+- **Cookies are cross-site.** Vercel and Render are different domains, so
+  sessions rely on `SameSite=None; Secure`. Both sides must be HTTPS, and
+  `CORS_ORIGINS` must match the frontend origin exactly — scheme included,
+  no trailing slash. Vercel preview URLs are per-deployment, so a preview
+  cannot log in unless its origin is added too.
+- **`AUTH_SECRET` is the password pepper.** Every environment sharing a
+  database must use the identical value, and it must never be rotated —
+  a different secret cannot verify existing password hashes, so every
+  login returns 401 with nothing else appearing wrong.
 - **`pg` and IPv6.** Node dials IPv6 and IPv4 concurrently; on a host whose
   AAAA route does not work, the dual-stack attempt reports `ETIMEDOUT` on
   the IPv4 socket too and *every* connection fails. `db.js` pins IPv4.
