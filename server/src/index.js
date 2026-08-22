@@ -2,7 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 
-import { env } from './env.js';
+import { env, isAllowedOrigin } from './env.js';
 import { pool, closePool } from './db.js';
 import { attachUser } from './auth/middleware.js';
 import { errorHandler } from './lib/errors.js';
@@ -35,8 +35,7 @@ app.disable('x-powered-by');
 app.use(cors({
   origin(origin, callback) {
     // Same-origin and server-to-server callers send no Origin header.
-    if (!origin) return callback(null, true);
-    if (env.corsOrigins.includes(origin)) return callback(null, true);
+    if (isAllowedOrigin(origin)) return callback(null, true);
 
     // Refuse by omitting the Access-Control-Allow-Origin header, which is
     // what actually stops a browser using the response. Passing an Error

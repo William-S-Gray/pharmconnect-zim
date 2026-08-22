@@ -46,6 +46,12 @@ export const env = {
   // Browsers only attach credentialed requests to origins the server names
   // explicitly, so this list is the actual gate on who may call the API
   // with a session cookie.
+  //
+  // An entry may contain `*` to cover Vercel's per-deployment preview URLs,
+  // which change on every deploy and so cannot be listed individually.
+  // Keep such patterns tight — `https://pharmconnect-*-myteam.vercel.app`,
+  // never `https://*.vercel.app`, which would let anyone's Vercel site make
+  // credentialed requests to this API.
   corsOrigins: (process.env.CORS_ORIGINS ?? 'http://localhost:8080')
     .split(',')
     .map((o) => o.trim())
@@ -94,6 +100,28 @@ export const env = {
   // every active super admin, which is looked up at send time.
   adminAlertEmail: process.env.ADMIN_ALERT_EMAIL ?? '',
 };
+
+/**
+ * Compile the allow-list once.
+ *
+ * `*` matches any run of characters except `.` and `/`, so a pattern
+ * cannot accidentally span a domain boundary: `https://a-*.example.com`
+ * will not match `https://a-evil.attacker.com/x.example.com`. Everything
+ * else in the entry is escaped and matched literally.
+ */
+const originMatchers = env.corsOrigins.map((entry) => {
+  if (!entry.includes('*')) return { exact: entry };
+  const pattern = entry
+    .split('*')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('[^./]*');
+  return { regex: new RegExp(`^${pattern}$`) };
+});
+
+export function isAllowedOrigin(origin) {
+  if (!origin) return true; // same-origin and server-to-server send none
+  return originMatchers.some((m) => (m.exact ? m.exact === origin : m.regex.test(origin)));
+}
 
 /**
  * Whether real email can be sent. When false the mailer logs messages to
