@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle2, XCircle, Clock, ShieldAlert, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { approveDeletion, subscribeToDeleteRequests } from '@/lib/lifecycleUtils';
@@ -29,16 +29,11 @@ const PharmacyDeleteRequestsPage = () => {
     queryKey: ['pharmacy', 'delete-requests', pharmacy?.id],
     queryFn: async () => {
       if (!pharmacy?.id) return [];
-      const { data, error } = await supabase
-        .from('delete_requests')
-        .select('*')
-        .eq('status', 'PENDING')
-        .eq('status', 'PENDING')
-        .eq('pharmacy_id', pharmacy.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      // Scoped by the server to the caller's own requests and their
+      // pharmacy's. The duplicated .eq('status', 'PENDING') in the version
+      // this replaces was harmless but shows the filter chain was not read.
+      const rows = await api.deleteRequests.list();
+      return rows.filter((r: any) => r.status === 'PENDING') as unknown as DeleteRequest[];
     },
     enabled: !!pharmacy?.id
   });

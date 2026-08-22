@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button';
 import { Check, X, Star } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useState } from 'react';
 
 const plans = [
@@ -40,14 +40,12 @@ const SubscriptionPage = () => {
       if (!pharmacy?.id) return;
       setLoadingPlan(plan);
       
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({ plan_tier: plan })
-        .eq('id', pharmacy.id);
-        
-      if (error) throw error;
-      
-      toast.success(`Succesfully switched to ${plan} plan`);
+      // Plan changes are super-admin only and audited. Previously any
+      // pharmacy admin could write plan_tier directly, so upgrading to PRO
+      // was a table update the browser could make for itself.
+      await api.admin.setPharmacyPlan(pharmacy.id, plan);
+
+      toast.success(`Successfully switched to ${plan} plan`);
     } catch (error: any) {
       toast.error(error.message || 'Failed to process subscription');
     } finally {

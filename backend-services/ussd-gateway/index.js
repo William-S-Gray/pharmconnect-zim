@@ -1,5 +1,4 @@
 import express from 'express';
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -15,7 +14,26 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-const supabase = createClient(process.env.SUPABASE_URL || 'http://mock', process.env.SUPABASE_SERVICE_KEY || 'mock');
+/**
+ * Drug availability search via the PharmConnect API.
+ *
+ * Replaces a direct `find_nearby_pharmacies` RPC call made with a Supabase
+ * key held by this service. The search endpoint is public, so this needs no
+ * credentials at all — which is the right amount for a service that only
+ * ever reads public availability.
+ */
+const API_URL = process.env.API_URL ?? 'http://localhost:4000';
+
+async function searchDrugs(query, { city = null, limit = 3 } = {}) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (city) params.set('city', city);
+
+  const response = await fetch(`${API_URL}/api/search?${params}`);
+  if (!response.ok) throw new Error(`Search failed: HTTP ${response.status}`);
+
+  const { results } = await response.json();
+  return results;
+}
 
 app.post('/ussd', async (req, res) => {
   // Read variables sent by Africa's Talking
@@ -43,23 +61,21 @@ app.post('/ussd', async (req, res) => {
       const query = inputs[1];
       response = `CON Enter your City or Suburb to find ${query}:`;
     } else if (step === 3 && inputs[0] === '1') {
-      // Perform Supabase RPC query for the drug
       const drugQuery = inputs[1];
       const city = inputs[2];
 
-      const { data, error } = await supabase.rpc('find_nearby_pharmacies', {
-        p_query: drugQuery,
-        p_lat: null, p_lng: null,
-        p_radius_km: 50,
-        p_city: city
-      });
+      let results = [];
+      try {
+        results = await searchDrugs(drugQuery, { city, limit: 3 });
+      } catch (err) {
+        console.error('[ussd] search failed:', err.message);
+      }
 
-      if (error || !data || data.length === 0) {
+      if (results.length === 0) {
         response = `END Sorry, we couldn't find ${drugQuery} near ${city} in stock right now.`;
       } else {
-        const top3 = data.slice(0, 3);
-        response = `CON Found at ${data.length} pharmacies:
-${top3.map((r, i) => `${i + 1}. ${r.pharmacy_name} - $${r.unit_price}`).join('\n')}
+        response = `CON Found at ${results.length} pharmacies:
+${results.map((r, i) => `${i + 1}. ${r.pharmacy_name} - ${r.unit_price == null ? 'ask' : '$' + r.unit_price.toFixed(2)}`).join('\n')}
 
 Select a number to Reserve or 0 to cancel:`;
       }

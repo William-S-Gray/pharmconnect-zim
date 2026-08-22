@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { toast } from 'sonner';
 import { 
@@ -43,34 +43,14 @@ const QuickStockUpdatePage = () => {
     queryKey: ['quick-stock', pharmacy?.id],
     queryFn: async () => {
       if (!pharmacy?.id) return [];
-      const { data, error } = await supabase
-        .from('pharmacy_stock')
-        .select(`
-          id,
-          drug_id,
-          quantity,
-          unit_price,
-          threshold,
-          expiry_date,
-          is_available,
-          drugs!drug_id (
-            generic_name,
-            common_name,
-            strength,
-            form
-          )
-        `)
-        .eq('pharmacy_id', pharmacy.id)
-        .order('id', { ascending: false });
-        
-      if (error) throw error;
-      
-      return (data || []).map((s: any) => ({
+      const { items } = await api.stock.list(pharmacy.id, { limit: 200 });
+
+      return items.map((s: any) => ({
         id: s.id,
         drug_id: s.drug_id,
-        drugName: s.drugs?.common_name || s.drugs?.generic_name || 'Unknown',
-        strength: s.drugs?.strength || '',
-        form: s.drugs?.form || '',
+        drugName: s.drug_name || 'Unknown',
+        strength: s.strength || '',
+        form: s.form || '',
         quantity: s.quantity || 0,
         unit_price: s.unit_price || 0,
         threshold: s.threshold || 0,
@@ -78,7 +58,7 @@ const QuickStockUpdatePage = () => {
         is_available: s.is_available ?? true,
       }));
     },
-    enabled: !!pharmacy?.id && isSupabaseConfigured,
+    enabled: !!pharmacy?.id,
   });
 
   useEffect(() => {
@@ -109,43 +89,22 @@ const QuickStockUpdatePage = () => {
 
   const batchUpdateMutation = useMutation({
     mutationFn: async (rows: StockRow[]) => {
-      if (role === 'pharmacy_staff') {
-        // Staff submits to pending_approvals
-        const requests = rows.map(row => ({
-          pharmacy_id: pharmacy?.id,
-          requester_id: user?.id,
-          action_type: 'UPDATE',
-          table_name: 'pharmacy_stock',
-          target_id: row.id,
-          payload: {
-            quantity: row.quantity,
-            unit_price: row.unit_price,
-            threshold: row.threshold,
-            is_available: row.is_available
-          }
-        }));
-        const { error } = await supabase.from('pending_approvals').insert(requests);
-        if (error) throw error;
-        return { count: rows.length, toApproval: true };
+      // The staff-versus-admin split is the server's decision now: each
+      // update comes back 202 with { pending: true } for staff and 200 for
+      // an admin. Branching on `role` here put the rule in the browser,
+      // where anyone bypassing the UI simply ignored it.
+      let queued = 0;
+      for (const row of rows) {
+        const result = await api.stock.update(pharmacy!.id, row.id, {
+          quantity: row.quantity,
+          unit_price: row.unit_price,
+          threshold: row.threshold,
+          is_available: row.is_available,
+        });
+        if (result && typeof result === 'object' && 'pending' in result) queued += 1;
       }
 
-      // Admin updates directly
-      const updates = rows.map(row => ({
-        id: row.id,
-        pharmacy_id: pharmacy?.id,
-        drug_id: row.drug_id,
-        quantity: row.quantity,
-        unit_price: row.unit_price,
-        threshold: row.threshold,
-        is_available: row.is_available
-      }));
-
-      const { error } = await supabase
-        .from('pharmacy_stock')
-        .upsert(updates, { onConflict: 'id' });
-        
-      if (error) throw error;
-      return { count: rows.length, toApproval: false };
+      return { count: rows.length, toApproval: queued > 0 };
     },
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['quick-stock'] });

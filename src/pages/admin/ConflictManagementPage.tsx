@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -31,59 +31,26 @@ const ConflictManagementPage = () => {
   const { data: conflicts = [], isLoading } = useQuery({
     queryKey: ['admin', 'conflicts'],
     queryFn: async () => {
-      let query = supabase
-        .from('sync_conflicts')
-        .select('*')
-        .eq('status', 'PENDING')
-        .order('created_at', { ascending: false });
-
-      if (role !== 'super_admin' && pharmacy?.id) {
-        query = query.eq('pharmacy_id', pharmacy.id);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as ConflictRecord[];
+      if (!pharmacy?.id) return [];
+      return await api.sync.conflicts(pharmacy.id, 'PENDING') as unknown as ConflictRecord[];
     },
   });
 
   const resolveMutation = useMutation({
     mutationFn: async ({ conflict, action }: { conflict: ConflictRecord, action: 'APPLY_LOCAL' | 'KEEP_SERVER' }) => {
-      const { id, table_name, record_id, local_data } = conflict;
+      const { id } = conflict;
 
-      if (action === 'APPLY_LOCAL') {
-        // 1. Update the actual record in its table
-        const { error: updateError } = await supabase
-          .from(table_name)
-          .update(local_data)
-          .eq('id', record_id);
-        
-        if (updateError) throw updateError;
-
-        // 2. Mark conflict as RESOLVED
-        const { error: conflictError } = await supabase
-          .from('sync_conflicts')
-          .update({ 
-            status: 'RESOLVED', 
-            resolved_at: new Date().toISOString(),
-            resolved_by: (await supabase.auth.getUser()).data.user?.id
-          })
-          .eq('id', id);
-
-        if (conflictError) throw conflictError;
-      } else {
-        // KEEP_SERVER - Just mark as DISCARDED
-        const { error: conflictError } = await supabase
-          .from('sync_conflicts')
-          .update({ 
-            status: 'DISCARDED', 
-            resolved_at: new Date().toISOString(),
-            resolved_by: (await supabase.auth.getUser()).data.user?.id
-          })
-          .eq('id', id);
-
-        if (conflictError) throw conflictError;
-      }
+      // Applying the local version and marking the conflict resolved now
+      // happen in one server-side transaction. Done from the browser as two
+      // writes, a failure between them left the row updated and the
+      // conflict still open — or the conflict closed with nothing applied.
+      // The server also restricts which columns a replay may touch, and
+      // stamps resolved_by from the session rather than trusting the client.
+      await api.sync.resolve(
+        pharmacy!.id,
+        id,
+        action === 'APPLY_LOCAL' ? 'local' : 'server',
+      );
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'conflicts'] });

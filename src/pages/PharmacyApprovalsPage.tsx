@@ -1,6 +1,6 @@
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,45 +16,23 @@ const PharmacyApprovalsPage = () => {
     queryKey: ['pending-approvals', pharmacy?.id],
     queryFn: async () => {
       if (!pharmacy?.id) return [];
-      const { data, error } = await supabase
-        .from('pending_approvals')
-        .select(`
-          *,
-          requester:profiles (full_name, email)
-        `)
-        .eq('pharmacy_id', pharmacy.id)
-        .eq('status', 'PENDING')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data;
+      // requester_name / requester_email arrive flat on the row.
+      return api.approvals.list(pharmacy.id, 'PENDING');
     },
     enabled: !!pharmacy?.id,
   });
 
   const resolveMutation = useMutation({
-    mutationFn: async ({ id, status, payload, action_type, target_id }: any) => {
+    mutationFn: async ({ id, status }: any) => {
+      // Applying the queued change and flipping the approval's status now
+      // happen in one server-side transaction. Doing it from the browser
+      // meant an approval could be marked APPROVED while the write that
+      // was supposed to accompany it had failed.
       if (status === 'APPROVED') {
-        // Apply the change to pharmacy_stock
-        if (action_type === 'CREATE') {
-          const { error } = await supabase.from('pharmacy_stock').insert([{ ...payload, pharmacy_id: pharmacy?.id }]);
-          if (error) throw error;
-        } else if (action_type === 'UPDATE') {
-          const { error } = await supabase.from('pharmacy_stock').update(payload).eq('id', target_id);
-          if (error) throw error;
-        } else if (action_type === 'DELETE') {
-          const { error } = await supabase.from('pharmacy_stock').delete().eq('id', target_id);
-          if (error) throw error;
-        }
+        await api.approvals.approve(pharmacy!.id, id);
+        return;
       }
-
-      // Update the approval record
-      const { error } = await supabase
-        .from('pending_approvals')
-        .update({ status })
-        .eq('id', id);
-
-      if (error) throw error;
+      await api.approvals.reject(pharmacy!.id, id);
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['pending-approvals'] });

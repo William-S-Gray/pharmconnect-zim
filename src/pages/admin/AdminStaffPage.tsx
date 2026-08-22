@@ -10,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Search, UserCog, Pencil, Trash2, Shield, Store } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -56,59 +56,32 @@ const AdminStaffPage = () => {
   const { data: pharmacies = [] } = useQuery({
     queryKey: ['admin', 'pharmacies_list'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('pharmacies').select('id, name').order('name');
-      if (error) throw error;
-      return data;
+      const { items } = await api.pharmacies.list({ limit: 200 });
+      return items.map((p) => ({ id: p.id, name: p.name }));
     }
   });
 
   const { data: staffList = [], isLoading } = useQuery<StaffMember[]>({
     queryKey: ['admin', 'staff'],
     queryFn: async () => {
-      // Step 1: Fetch all memberships with user_id and pharmacy_id
-      const { data: memberships, error: mError } = await supabase
-        .from('memberships')
-        .select('role, user_id, pharmacy_id, created_at');
-      
-      if (mError) throw mError;
-      if (!memberships?.length) return [];
+      // One request. This replaced a five-step client-side join: fetch
+      // every membership, collect the ids, batch-fetch profiles, batch-fetch
+      // pharmacies, then merge with lookup maps in the browser. The
+      // endpoint aggregates memberships per user in SQL.
+      const { items } = await api.admin.users({ limit: 200 });
 
-      // Step 2: Collect unique user_ids and pharmacy_ids
-      const userIds = [...new Set(memberships.map(m => m.user_id))];
-      const pharmIds = [...new Set(memberships.map(m => m.pharmacy_id))];
-
-      // Step 3: Batch-fetch profiles
-      const { data: profilesData, error: pError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, global_role')
-        .in('id', userIds);
-      if (pError) throw pError;
-
-      // Step 4: Batch-fetch pharmacies
-      const { data: pharmaciesData, error: phError } = await supabase
-        .from('pharmacies')
-        .select('id, name')
-        .in('id', pharmIds);
-      if (phError) throw phError;
-
-      // Step 5: Build lookup maps and merge
-      const profileMap = Object.fromEntries((profilesData || []).map(p => [p.id, p]));
-      const pharmMap = Object.fromEntries((pharmaciesData || []).map(p => [p.id, p]));
-
-      return memberships.map(m => {
-        const prof = profileMap[m.user_id] || {};
-        const pharm = pharmMap[m.pharmacy_id] || {};
-        return {
-          id: prof.id || m.user_id,
-          email: prof.email || '',
-          full_name: prof.full_name || '',
-          global_role: prof.global_role as UserRole,
+      return items.flatMap((u: any) =>
+        (u.memberships ?? []).map((m: any) => ({
+          id: u.id,
+          email: u.email ?? '',
+          full_name: u.full_name ?? '',
+          global_role: u.global_role as UserRole,
           membership_role: m.role as UserRole,
           pharmacy_id: m.pharmacy_id,
-          pharmacy_name: pharm.name || 'Unknown',
-          joined: m.created_at,
-        };
-      });
+          pharmacy_name: m.name || 'Unknown',
+          joined: u.created_at,
+        })),
+      );
     },
   });
 

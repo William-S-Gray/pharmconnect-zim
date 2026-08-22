@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle2, XCircle, Clock, AlertCircle, ShieldAlert, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { approveDeletion, subscribeToDeleteRequests } from '@/lib/lifecycleUtils';
@@ -32,32 +32,23 @@ const AdminDeleteRequestsPage = () => {
   const { data: requests = [], isLoading } = useQuery<DeleteRequest[]>({
     queryKey: ['system', 'delete-requests', role, pharmacy?.id],
     queryFn: async () => {
-      let query = supabase
-        .from('delete_requests')
-        .select('*')
-        .eq('status', 'PENDING')
-        .order('created_at', { ascending: false });
-
-      if (role !== 'super_admin' && pharmacy?.id) {
-        query = query.eq('pharmacy_id', pharmacy.id);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      // Enhance with requester email and target names (simplified for now)
-      return (data || []).map(r => ({ ...r, requester_email: 'Staff User' }));
+      // The endpoint joins the requester's profile, so this shows who
+      // actually asked instead of labelling every row 'Staff User'.
+      const rows = await api.admin.deleteRequests('PENDING');
+      return rows.map((r: any) => ({ ...r, requester_email: r.requester_name || 'Unknown' }));
     }
   });
 
   // Realtime Subscription
   useEffect(() => {
     const pId = role === 'super_admin' ? undefined : pharmacy?.id;
-    const unsubscribe = subscribeToDeleteRequests(pId, (newRequest) => {
+    const unsubscribe = subscribeToDeleteRequests(pId, () => {
       queryClient.invalidateQueries({ queryKey: ['system', 'delete-requests'] });
       setNewRequestCount(prev => prev + 1);
       toast.info('New Deletion Request', {
-        description: `A new request for ${newRequest.target_table} requires your approval.`,
+        // The realtime event carries identifiers only, never row contents,
+        // so the toast cannot name the target table without a refetch.
+        description: 'A new request requires your approval.',
         icon: <BellRing className="w-4 h-4 text-primary" />,
         duration: 8000,
       });
@@ -79,13 +70,9 @@ const AdminDeleteRequestsPage = () => {
 
   const denyMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('delete_requests')
-        .update({ status: 'DENIED', reviewed_at: new Date().toISOString(), reviewer_id: (await supabase.auth.getUser()).data.user?.id })
-        .eq('id', id);
-      if (error) throw error;
-      
-      // Reset target record status to ACTIVE (implementation details would vary by table)
+      // reviewer_id and reviewed_at are stamped server-side from the
+      // session, so the client cannot attribute a decision to someone else.
+      await api.admin.decideDeleteRequest(id, 'DENIED');
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['system', 'delete-requests'] });

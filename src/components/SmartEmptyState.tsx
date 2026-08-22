@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Brain, Pill, ChevronRight, AlertCircle, Lightbulb, Search, ShieldAlert, LineChart } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 // ─── Local fallback (used if Supabase symptom_drug_map table not yet seeded) ──
 const LOCAL_SYMPTOM_MAP: Record<string, { drugs: string[]; tip: string; emoji: string }> = {
@@ -74,26 +74,17 @@ export function SmartEmptyState({ query, city = 'Harare', onSearchSuggestion }: 
     if (!query) { setLoaded(true); return; }
 
     const fetchSuggestions = async () => {
-      // 1. Try Supabase symptom suggestions RPC
-      if (isSupabaseConfigured) {
-        try {
-          const { data, error } = await supabase.rpc('get_symptom_suggestions', { p_query: query });
-          
-          if (!error && data && data.length > 0) {
-            const firstMatch = data[0];
-            if (firstMatch.symptom_detected) {
-              setMatch({ 
-                drugs: firstMatch.suggested_drugs || [], 
-                tip: firstMatch.tip || '', 
-                emoji: '💊' // Default emoji as it's not in RPC
-              });
-              setLoaded(true);
-              return;
-            }
-          }
-        } catch (err) {
-          console.warn('Symptom RPC failed:', err);
+      // 1. Ask the server what this query means. It returns an empty
+      //    suggestion list for anything that is already a drug name.
+      try {
+        const { intent, suggestions } = await api.search.intent(query);
+        if (intent === 'symptom' && suggestions.length > 0) {
+          setMatch({ drugs: suggestions, tip: `Commonly used for "${query}"`, emoji: '💊' });
+          setLoaded(true);
+          return;
         }
+      } catch (err) {
+        console.warn('Symptom lookup failed:', err);
       }
       
       // 2. Fallback to local map

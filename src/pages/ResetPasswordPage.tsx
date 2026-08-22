@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { KeyRound, ArrowLeft, CheckCircle, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { PasswordStrengthMeter, isPasswordValid } from '@/components/PasswordStrengthMeter';
 
 const ResetPasswordPage = () => {
@@ -21,14 +21,10 @@ const ResetPasswordPage = () => {
 
   useEffect(() => {
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      // Supabase recovery links put the session in the URL hash, 
-      // which automatically populates the session on load.
-      if (!session && !token) {
-        setIsValidToken(false);
-      } else {
-        setIsValidToken(true);
-      }
+      // The reset token now arrives as a plain ?token= query parameter and
+      // is verified when it is redeemed. Supabase put a session in the URL
+      // hash instead, which is why this used to check for one.
+      setIsValidToken(Boolean(token));
     };
     
     checkSession();
@@ -41,8 +37,8 @@ const ResetPasswordPage = () => {
 
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      if (!token) throw new Error('This reset link is missing its token.');
+      await api.auth.resetPassword(token, password);
       setIsSuccess(true);
       toast.success('Password has been reset successfully');
     } catch (error: any) {

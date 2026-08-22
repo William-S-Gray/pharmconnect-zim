@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 
 const AlertSettingsPage = () => {
@@ -19,15 +19,9 @@ const AlertSettingsPage = () => {
   const { data: settings, isLoading } = useQuery({
     queryKey: ['alert-settings', pharmacy?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pharmacies')
-        .select('alert_phone, default_threshold, alert_frequency')
-        .eq('id', pharmacy?.id)
-        .single();
-      if (error) throw error;
-      return data;
+      return api.pharmacies.get(pharmacy!.id) as any;
     },
-    enabled: !!pharmacy?.id && isSupabaseConfigured,
+    enabled: !!pharmacy?.id,
   });
 
   const [phone, setPhone] = useState('');
@@ -46,15 +40,11 @@ const AlertSettingsPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async (data: any) => {
-      const { error } = await supabase
-        .from('pharmacies')
-        .update({
-          alert_phone: data.phone,
-          default_threshold: data.default_threshold,
-          alert_frequency: data.frequency
-        })
-        .eq('id', pharmacy?.id);
-      if (error) throw error;
+      await api.pharmacies.update(pharmacy!.id, {
+        alert_phone: data.phone,
+        default_threshold: data.default_threshold,
+        alert_frequency: data.frequency,
+      } as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['alert-settings'] });
@@ -68,21 +58,17 @@ const AlertSettingsPage = () => {
   const testSmsMutation = useMutation({
     mutationFn: async () => {
       // In a real high-security setup, this would call an Edge Function
-      const { data, error } = await supabase.functions.invoke('send-test-sms', {
-        body: { phone }
-      });
-      if (error) throw error;
+      // The send-test-sms edge function has no replacement yet — see
+      // MIGRATION.md. Failing loudly beats the previous behaviour, which
+      // caught the 404 and reported a "Simulated SMS" success for a
+      // message that was never sent.
+      throw new Error('SMS delivery is not configured yet.');
     },
     onSuccess: () => {
       toast({ title: 'Test SMS sent', description: `A test message has been sent to ${phone}.` });
     },
     onError: (error: any) => {
-      // For demo purposes, we ignore function not found if it's not deployed yet
-      if (error.message?.includes('404')) {
-        toast({ title: 'Simulated SMS', description: `Test message conceptually sent to ${phone}. Edge Function pending deployment.` });
-      } else {
-        toast({ title: 'Error', description: error.message || 'Failed to send test SMS.' });
-      }
+      toast({ title: 'Error', description: error.message || 'Failed to send test SMS.' });
     },
   });
 

@@ -50,7 +50,6 @@ export default defineConfig(({ mode }) => ({
       output: {
         manualChunks: {
           'vendor-core': ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
-          'vendor-supabase': ['@supabase/supabase-js'],
           'vendor-ui': ['lucide-react', 'sonner', 'clsx', 'tailwind-merge'],
           'vendor-radix': [
             '@radix-ui/react-dialog',

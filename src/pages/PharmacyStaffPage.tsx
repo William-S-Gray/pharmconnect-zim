@@ -9,7 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Search, UserCog, Trash2, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -54,35 +54,19 @@ const PharmacyStaffPage = () => {
       if (!pharmacy?.id) return [];
       
       // Step 1: fetch memberships for this pharmacy
-      const { data: memberships, error: mError } = await supabase
-        .from('memberships')
-        .select('role, user_id, created_at')
-        .eq('pharmacy_id', pharmacy.id);
-      
-      if (mError) throw mError;
-      if (!memberships?.length) return [];
+      // One request. This replaced a two-step client-side join: fetch the
+      // memberships, collect the user ids, batch-fetch the profiles, then
+      // merge them with a lookup map in the browser.
+      const roster = await api.pharmacies.staff(pharmacy.id);
 
-      // Step 2: batch-fetch the profiles
-      const userIds = memberships.map(m => m.user_id);
-      const { data: profilesData, error: pError } = await supabase
-        .from('profiles')
-        .select('id, email, full_name, global_role')
-        .in('id', userIds);
-      if (pError) throw pError;
-
-      const profileMap = Object.fromEntries((profilesData || []).map(p => [p.id, p]));
-
-      return memberships.map(m => {
-        const prof = profileMap[m.user_id] || {};
-        return {
-          id: prof.id || m.user_id,
-          email: prof.email || '',
-          full_name: prof.full_name || '',
-          global_role: prof.global_role as UserRole,
-          membership_role: m.role as UserRole,
-          joined: m.created_at,
-        };
-      });
+      return roster.map((m: any) => ({
+        id: m.id,
+        email: m.email ?? '',
+        full_name: m.full_name ?? '',
+        global_role: m.global_role as UserRole,
+        membership_role: m.role as UserRole,
+        joined: m.joined_at,
+      }));
     },
     enabled: !!pharmacy?.id,
   });

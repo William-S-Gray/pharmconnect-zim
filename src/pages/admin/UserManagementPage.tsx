@@ -11,15 +11,13 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Search, UserCog, Edit, Trash2, Shield, Store, UserPlus, Mail, ArrowDownCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
-import { logAuditEvent } from '@/lib/auditUtils';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
 import { createStaffUser, sendPasswordResetEmail } from '@/lib/adminAuthUtils';
 import { requestDeletion } from '@/lib/lifecycleUtils';
 import { useAuth, UserRole } from '@/context/AuthContext';
-import { sendNewStaffAlert } from '@/lib/emailService';
 
 type ManagedUser = {
   id: string;
@@ -58,61 +56,40 @@ const UserManagementPage = () => {
   const { data: pharmacies = [] } = useQuery({
     queryKey: ['admin', 'pharmacies_list'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('pharmacies').select('id, name').order('name');
-      if (error) throw error;
-      return data;
+      const { items } = await api.pharmacies.list({ limit: 200 });
+      return items.map((p) => ({ id: p.id, name: p.name }));
     }
   });
 
   const { data: users = [], isLoading } = useQuery<ManagedUser[]>({
     queryKey: ['admin', 'users_management'],
     queryFn: async () => {
-      let query = supabase
-        .from('profiles')
-        .select(`
-          id, 
-          email, 
-          full_name, 
-          global_role, 
-          lifecycle_status, 
-          created_at,
-          memberships (
-            role, 
-            pharmacy_id, 
-            pharmacies (name)
-          )
-        `);
+      // One request, with memberships aggregated server-side. The version
+      // this replaces ran a separate membership query to scope a pharmacy
+      // admin to their own team — and this endpoint is super-admin only
+      // anyway, so that branch never applied.
+      const { items } = await api.admin.users({ limit: 200 });
 
-      if (myRole === 'pharmacy_admin' && pharmacy?.id) {
-        // Scoped to pharmacy members
-        const { data: members } = await supabase.from('memberships').select('user_id').eq('pharmacy_id', pharmacy.id);
-        const ids = members?.map(m => m.user_id) || [];
-        query = query.in('id', ids);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      return (data || []).map((u: any) => {
-        const primaryMem = u.memberships?.[0] || {};
+      return items.map((u: any) => {
+        const primary = u.memberships?.[0] ?? {};
         return {
           id: u.id,
           email: u.email,
           full_name: u.full_name,
           global_role: u.global_role,
-          membership_role: primaryMem.role,
-          pharmacy_id: primaryMem.pharmacy_id,
-          pharmacy_name: primaryMem.pharmacies?.name || 'No Pharmacy',
+          membership_role: primary.role,
+          pharmacy_id: primary.pharmacy_id,
+          pharmacy_name: primary.name || 'No Pharmacy',
           lifecycle_status: u.lifecycle_status,
-          joined: u.created_at,
+          created_at: u.created_at,
         };
-      });
-    }
+      }) as unknown as ManagedUser[];
+    },
   });
 
   const filteredUsers = users.filter(u => {
-    const matchesSearch = u.full_name.toLowerCase().includes(search.toLowerCase()) || 
-                          u.email.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = (u.full_name ?? '').toLowerCase().includes(search.toLowerCase()) ||
+                          (u.email ?? '').toLowerCase().includes(search.toLowerCase());
     const matchesRole = roleFilter === 'all' || u.global_role === roleFilter;
     const matchesPharm = pharmacyFilter === 'all' || u.pharmacy_id === pharmacyFilter;
     return matchesSearch && matchesRole && matchesPharm;
@@ -129,11 +106,9 @@ const UserManagementPage = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
-      
-      // Trigger EmailJS alert
-      if (myRole === 'pharmacy_admin' && pharmacy) {
-        sendNewStaffAlert(user?.email || '', formData.full_name, pharmacy.name).catch(console.error);
-      }
+
+      // The new user's welcome email is sent by the server when the account
+      // is created, so it goes out however the account was provisioned.
 
       toast.success('User account created successfully');
       setShowCreate(false);
@@ -144,25 +119,18 @@ const UserManagementPage = () => {
 
   const updateMutation = useMutation({
     mutationFn: async (data: Partial<ManagedUser>) => {
-      const { id, full_name, global_role, membership_role } = data;
-      
-      // Update profile
-      const { error: pError } = await supabase.from('profiles').update({ full_name, global_role }).eq('id', id);
-      if (pError) throw pError;
+      const { id, global_role } = data;
 
-      // Update membership role if applicable
-      if (membership_role) {
-        const { error: mError } = await supabase.from('memberships').update({ role: membership_role }).eq('user_id', id);
-        if (mError) throw mError;
-      }
+      // Role changes go through the one audited endpoint that refuses to
+      // change your own role. Writing profiles.global_role directly from
+      // the browser is exactly what the gate-1 audit found.
+      if (global_role) await api.admin.setRole(id!, global_role as any);
 
-      await logAuditEvent({
-        action: 'update',
-        category: 'user_mgmt',
-        target: full_name || id,
-        detail: `User ${full_name} updated. Global: ${global_role}, Membership: ${membership_role}`,
-        metadata: { target_user_id: id, global_role, membership_role }
-      });
+      // full_name and the membership role are not editable here any more:
+      // there is no endpoint that lets an admin rewrite another person's
+      // display name, and the previous membership update had no
+      // pharmacy_id in its WHERE clause, so it changed that user's role at
+      // every pharmacy they belonged to.
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });
@@ -175,23 +143,10 @@ const UserManagementPage = () => {
   const deleteMutation = useMutation({
     mutationFn: async (user: ManagedUser) => {
       if (myRole === 'super_admin') {
-         // Direct move to trash for Super Admins
-         const { error } = await supabase
-           .from('profiles')
-           .update({ lifecycle_status: 'TRASHED', trashed_at: new Date().toISOString() })
-           .eq('id', user.id);
-         if (error) throw error;
+        await api.admin.trashUser(user.id);
       } else {
-         return requestDeletion('profiles', user.id, 'Administrative removal', user.pharmacy_id);
+        return requestDeletion('profiles', user.id, 'Administrative removal', user.pharmacy_id);
       }
-
-      await logAuditEvent({
-        action: 'delete',
-        category: 'user_mgmt',
-        target: user.full_name,
-        detail: `User ${user.full_name} moved to trash`,
-        metadata: { target_user_id: user.id }
-      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users_management'] });

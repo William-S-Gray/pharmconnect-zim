@@ -1,31 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 import { toast } from 'sonner';
+import { api, ApiError } from '@/lib/api';
+import type { AuthPayload, Pharmacy, UserProfile, UserRole } from '@/lib/api';
 
-const AUTH_CACHE_KEY = 'pharmconnect_auth_cache';
+/**
+ * Session state for the app shell.
+ *
+ * This replaced ~360 lines built around client-side Supabase auth: an RPC
+ * fast path with a sequential fallback, a manual profile upsert, invitation
+ * auto-linking, avatar syncing, an 8-second race timeout and a promise
+ * guard against concurrent fetches. All of it existed because the browser
+ * was assembling its own identity from several tables.
+ *
+ * `GET /api/auth/me` now returns profile, role, pharmacy and memberships in
+ * one response, already authorized. Invitation linking happens server-side
+ * at registration. There is no token to hold: the session is an httpOnly
+ * cookie the browser attaches on its own.
+ */
 
-export type UserRole = 'super_admin' | 'pharmacy_admin' | 'pharmacy_staff';
-
-export interface Pharmacy {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  city: string;
-  suburb: string;
-  status: 'PENDING' | 'APPROVED' | 'SUSPENDED' | 'REJECTED';
-  plan_tier: 'FREE' | 'BASIC' | 'PRO';
-  lat?: number;
-  lng?: number;
-}
-
-export interface UserProfile {
-  id: string;
-  email: string;
-  full_name: string;
-  global_role: UserRole;
-  avatar_url?: string;
-}
+export type { UserRole, Pharmacy, UserProfile };
 
 export interface AuthUser {
   id: string;
@@ -38,8 +31,9 @@ interface AuthContextType {
   profile: UserProfile | null;
   role: UserRole | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, totp?: string) => Promise<{ mfaRequired: boolean }>;
   logout: () => void;
+  refresh: () => Promise<void>;
   isApproved: boolean;
   isSuperAdmin: boolean;
   isPharmacyAdmin: boolean;
@@ -55,315 +49,68 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [isLoading, setLoading] = useState(true);
 
-  // Initialize from cache for instant UI response
-  useEffect(() => {
-    const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
-    if (cached) {
-      try {
-        const { pharmacy: cPharmacy, profile: cProfile, role: cRole } = JSON.parse(cached);
-        if (cPharmacy) setPharmacy(cPharmacy);
-        if (cProfile) setProfile(cProfile);
-        if (cRole) setRole(cRole);
-      } catch (e) {
-        sessionStorage.removeItem(AUTH_CACHE_KEY);
-      }
-    }
-  }, []);
-
-  const fetchPromise = React.useRef<Promise<void> | null>(null);
-
-  const fetchFullProfile = useCallback(async (userId: string, forceRefresh = false) => {
-    if (!isSupabaseConfigured) return;
-
-    if (!forceRefresh) {
-      const cached = sessionStorage.getItem(AUTH_CACHE_KEY);
-      if (cached) {
-        try {
-          const parsed = JSON.parse(cached);
-          if (parsed.profile?.id === userId && parsed.role) return;
-        } catch (e) { /* ignore */ }
-      }
-    }
-
-    if (fetchPromise.current && !forceRefresh) {
-      return fetchPromise.current;
-    }
-
-    let resolveFetch: (() => void) | undefined;
-    fetchPromise.current = new Promise<void>((resolve) => { resolveFetch = resolve; });
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Profile fetch timed out')), 8000);
-    });
-
-    try {
-      let profileData: UserProfile | null = null;
-      let finalRole: UserRole | null = null;
-      let finalPharmacy: Pharmacy | null = null;
-
-      console.log('DEBUG: fetchFullProfile starting for', userId);
-
-      const fetchLogic = async () => {
-        // 1. Try RPC first (fast path)
-        const { data: rpcData, error: rpcError } = await supabase.rpc('get_user_auth_data', { p_user_id: userId });
-
-        if (!rpcError && rpcData) {
-          profileData = rpcData.profile;
-          if (rpcData.membership) {
-            finalPharmacy = rpcData.membership.pharmacy;
-            finalRole = rpcData.membership.role;
-          } else if (profileData) {
-            finalRole = profileData.global_role;
-          }
-          console.log('DEBUG: RPC successful', { profileData, finalRole });
-        } else {
-          console.log('DEBUG: RPC failed or missing, falling back to sequential fetch', rpcError);
-          const { data: pData } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', userId)
-            .maybeSingle();
-
-          if (pData) {
-            profileData = pData as UserProfile;
-          } else {
-            // Profile row missing — auto-create from session metadata
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) {
-              console.log('DEBUG: Auth user metadata found:', { 
-                app_role: authUser.app_metadata?.role, 
-                user_role: authUser.user_metadata?.role,
-                email: authUser.email 
-              });
-              const isDashboardAdmin = authUser.app_metadata?.role === 'super_admin' || 
-                                     authUser.user_metadata?.role === 'super_admin' ||
-                                     authUser.email === 'graywilliamwiltino@gmail.com';
-
-              const { data: upserted } = await supabase
-                .from('profiles')
-                .upsert({
-                  id: userId,
-                  email: authUser.email ?? '',
-                  full_name: authUser.user_metadata?.name ?? authUser.user_metadata?.full_name ?? 'System User',
-                  global_role: isDashboardAdmin ? 'super_admin' : 'pharmacy_staff',
-                  avatar_url: authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture ?? null,
-                }, { onConflict: 'id' })
-                .select()
-                .maybeSingle();
-              if (upserted) profileData = upserted as UserProfile;
-            }
-          }
-
-          // --- AUTO-LINKING LOGIC ---
-          // Check for pending invitations if no membership exists
-          const { data: existingMembership } = await supabase
-            .from('memberships')
-            .select('id')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-          if (!existingMembership && profileData?.email) {
-            const { data: invData } = await supabase
-              .from('invitations')
-              .select('*')
-              .eq('email', profileData.email)
-              .eq('status', 'PENDING')
-              .order('created_at', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-
-            if (invData) {
-              console.log('DEBUG: Found pending invitation, linking user...', invData);
-              const { error: linkError } = await supabase
-                .from('memberships')
-                .insert({
-                  user_id: userId,
-                  pharmacy_id: invData.pharmacy_id,
-                  role: invData.role
-                });
-
-              if (!linkError) {
-                // Mark invitation as accepted
-                await supabase
-                  .from('invitations')
-                  .update({ status: 'ACCEPTED' })
-                  .eq('id', invData.id);
-                
-                toast.success('Successfully linked to your pharmacy team!');
-              }
-            }
-          }
-
-          // Fetch membership
-          const { data: mData } = await supabase
-            .from('memberships')
-            .select('role, pharmacy_id, pharmacies (*)')
-            .eq('user_id', userId)
-            .maybeSingle();
-
-          if (mData) {
-            finalPharmacy = mData.pharmacies as unknown as Pharmacy;
-            finalRole = (mData.role as UserRole) || (profileData?.global_role as UserRole);
-          } else if (profileData) {
-            finalRole = profileData.global_role as UserRole;
-          }
-        }
-      };
-
-      await Promise.race([fetchLogic(), timeoutPromise]);
-
-      // --- FINAL OVERRIDE BLOCK ---
-      // Force super_admin if email/metadata matches, even if DB says pharmacy_staff
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        const isDesignatedAdmin = authUser.app_metadata?.role === 'super_admin' || 
-                                 authUser.user_metadata?.role === 'super_admin' ||
-                                 authUser.email === 'graywilliamwiltino@gmail.com';
-        
-        if (isDesignatedAdmin) {
-          console.log('DEBUG: Forcing role to super_admin based on metadata/email bypass');
-          finalRole = 'super_admin';
-          // Sync DB in background if it was incorrect
-          if (profileData && profileData.global_role !== 'super_admin') {
-            supabase.from('profiles').update({ 
-               global_role: 'super_admin',
-               avatar_url: authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture ?? profileData.avatar_url
-            }).eq('id', userId).then();
-          }
-        } else if (profileData && (authUser.user_metadata?.avatar_url || authUser.user_metadata?.picture)) {
-          // Sync avatar if it changed/arrived from Google
-          const newAvatar = authUser.user_metadata?.avatar_url ?? authUser.user_metadata?.picture;
-          if (newAvatar !== profileData.avatar_url) {
-            supabase.from('profiles').update({ avatar_url: newAvatar }).eq('id', userId).then();
-            profileData.avatar_url = newAvatar;
-          }
-        }
-      }
-
-      console.log('DEBUG: fetchFullProfile logic complete', { finalRole, hasPharmacy: !!finalPharmacy });
-
-      if (!finalRole) {
-        console.warn('No role determined for user', userId);
-        finalRole = 'pharmacy_staff'; // Final fallback
-      }
-
-      if (profileData) setProfile(profileData);
-      if (finalPharmacy) setPharmacy(finalPharmacy);
-      setRole(finalRole);
-
-      sessionStorage.setItem(AUTH_CACHE_KEY, JSON.stringify({
-        pharmacy: finalPharmacy,
-        profile: profileData,
-        role: finalRole,
-        timestamp: Date.now()
-      }));
-
-    } catch (error) {
-      console.error('Critical error in fetchFullProfile:', error);
-    } finally {
-      fetchPromise.current = null;
-      resolveFetch?.();
-    }
-  }, []);
-
-  const performLogout = useCallback((showMessage = false) => {
-    if (isSupabaseConfigured) {
-      supabase.auth.signOut();
-    }
-    
-    setPharmacy(null);
-    setUser(null);
-    setProfile(null);
-    setRole(null);
-    sessionStorage.removeItem(AUTH_CACHE_KEY);
-    fetchPromise.current = null;
-
-    if (showMessage) {
-      toast.info('You have been logged out.');
-      setTimeout(() => {
-        window.location.href = '/login';
-      }, 1500);
-    }
-  }, []);
-
-  // Handle Auth State Changes
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
+  const applyPayload = useCallback((payload: AuthPayload | null) => {
+    if (!payload) {
+      setUser(null);
+      setProfile(null);
+      setPharmacy(null);
+      setRole(null);
       return;
     }
+    setUser({ id: payload.profile.id, email: payload.profile.email });
+    setProfile(payload.profile);
+    setPharmacy(payload.pharmacy);
+    // Taken from the server's response and never derived locally. The role
+    // is re-read from the database on every request, so a change or a
+    // suspension takes effect immediately rather than at session expiry.
+    setRole(payload.role);
+  }, []);
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        if (session) {
-          setUser(session.user);
-          await fetchFullProfile(session.user.id);
-        } else {
-          setUser(null);
-          setPharmacy(null);
-          setProfile(null);
-          setRole(null);
-        }
-      } catch (e) {
-        console.error('Auth state change error:', e);
-      } finally {
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
-  }, [fetchFullProfile]);
-
-  const login = useCallback(async (email: string, password: string) => {
-    if (!isSupabaseConfigured) {
-      throw new Error('Supabase not configured. Please check your .env file.');
-    }
-
-    // 1. Check rate limit before attempting login
+  const refresh = useCallback(async () => {
     try {
-      const { data: isAllowed, error: rateLimitError } = await supabase.rpc('check_login_rate_limit', { 
-        p_email: email.toLowerCase().trim() 
-      });
-
-      if (!rateLimitError && isAllowed === false) {
-        throw new Error('Too many login attempts. Please try again in 15 minutes.');
+      applyPayload(await api.auth.me());
+    } catch (err) {
+      // A network failure must not look like a sign-out, or a brief blip
+      // bounces the user to the login page mid-task. Only an explicit null
+      // from the server clears the session.
+      if (err instanceof ApiError && err.status === 0) {
+        console.warn('[auth] server unreachable; keeping current session state');
+        return;
       }
-    } catch (e: any) {
-      if (e.message.includes('Too many login attempts')) throw e;
-      console.warn('Rate limit service unavailable, proceeding with caution:', e);
+      applyPayload(null);
     }
+  }, [applyPayload]);
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+  useEffect(() => {
+    refresh().finally(() => setLoading(false));
+  }, [refresh]);
 
-    // 2. Log the attempt results
-    try {
-      await supabase.rpc('log_login_attempt', { 
-        p_email: email.toLowerCase().trim(), 
-        p_success: !error 
-      });
-    } catch (e) {
-      console.warn('Failed to log login attempt:', e);
-    }
+  /**
+   * Resolves `{ mfaRequired: true }` when the account has TOTP enrolled and
+   * no code was supplied — the password was correct, so this is not an
+   * error. Callers show the code field and call again with `totp`.
+   */
+  const login = useCallback(async (email: string, password: string, totp?: string) => {
+    const result = await api.auth.login(email, password, totp);
 
-    if (error) throw error;
-    
-    if (data.user) {
-      setUser(data.user);
-      await fetchFullProfile(data.user.id);
-    }
-  }, [fetchFullProfile]);
+    if ('mfa_required' in result) return { mfaRequired: true };
+
+    applyPayload(result);
+    return { mfaRequired: false };
+  }, [applyPayload]);
 
   const logout = useCallback(() => {
-    performLogout(false);
-  }, [performLogout]);
+    // Clear local state first so the UI responds immediately; the cookie is
+    // revoked server-side regardless of whether that request succeeds.
+    applyPayload(null);
+    api.auth.logout().catch((err) => console.warn('[auth] logout request failed', err));
+    toast.info('You have been logged out.');
+  }, [applyPayload]);
 
   return (
     <AuthContext.Provider value={{
       pharmacy, user, profile, role, isLoading,
-      login, logout,
+      login, logout, refresh,
       isApproved: pharmacy?.status === 'APPROVED',
       isSuperAdmin: role === 'super_admin',
       isPharmacyAdmin: role === 'pharmacy_admin',
@@ -379,5 +126,3 @@ export const useAuth = () => {
   if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
   return ctx;
 };
-
-

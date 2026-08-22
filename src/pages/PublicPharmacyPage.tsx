@@ -1,20 +1,22 @@
 import { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Navbar } from '@/components/Navbar';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Phone, MessageCircle, MapPin, Clock, Search, ArrowLeft, Share2, Navigation, ShoppingBag, ShieldCheck } from 'lucide-react';
+import { Phone, MessageCircle, MapPin, Clock, Search, ArrowLeft, Share2, Navigation, ShoppingBag, ShieldCheck, Zap, Pill } from 'lucide-react';
 import { toast } from 'sonner';
 import { StockStatusBadge, type StockStatus } from '@/components/StockStatusBadge';
 import { ReserveDrugModal } from '@/components/ReserveDrugModal';
-import { GoogleMap, useJsApiLoader, MarkerF } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, type Libraries } from '@react-google-maps/api';
 import { cn } from '@/lib/utils';
 
-const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
+// Typed as the loader's own Libraries type. The hand-written union
+// included "localContext", which @react-google-maps/api dropped.
+const GOOGLE_MAPS_LIBRARIES: Libraries = ['places'];
 
 function computeIsOpenNow(operatingHours: any, isOpen24h: boolean): boolean {
   if (isOpen24h) return true;
@@ -54,44 +56,23 @@ const PublicPharmacyPage = () => {
   const { data: pharmacy, isLoading: pharmaLoading } = useQuery({
     queryKey: ['public-pharmacy', id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pharmacies')
-        .select('*')
-        .eq('id', id)
-        .single();
-      if (error) throw error;
-      return data;
+      // One request returns the pharmacy and its public stock together.
+      // The endpoint only serves approved, active pharmacies and exposes a
+      // fixed column list, so an unapproved pharmacy's details are not
+      // reachable here even by guessing the id.
+      return api.pharmacies.getPublic(id!);
     },
     enabled: !!id,
   });
 
-  const { data: stock = [], isLoading: stockLoading } = useQuery({
-    queryKey: ['public-pharmacy-stock', id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pharmacy_stock')
-        .select(`
-          id, quantity, unit_price, threshold, is_available,
-          drugs!drug_id (id, generic_name, common_name, strength, form)
-        `)
-        .eq('pharmacy_id', id)
-        .eq('is_available', true);
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!id,
-  });
+  const stock = pharmacy?.stock ?? [];
 
   const filteredStock = useMemo(() => {
     if (!search) return stock;
     const s = search.toLowerCase();
-    return stock.filter((item: any) => {
-      const d = item.drugs;
-      return (
-        d.common_name?.toLowerCase().includes(s) ||
-        d.generic_name?.toLowerCase().includes(s)
-      );
-    });
+    // drug_name is denormalised onto the stock row, so there is no nested
+    // drugs object to reach through any more.
+    return stock.filter((item: any) => item.drug_name?.toLowerCase().includes(s));
   }, [stock, search]);
 
   const isOpen = useMemo(() => {
@@ -111,7 +92,7 @@ const PublicPharmacyPage = () => {
     }
   };
 
-  if (pharmaLoading || stockLoading) {
+  if (pharmaLoading) {
     return <div className="h-screen flex items-center justify-center"><LoadingSpinner size="lg" /></div>;
   }
 
@@ -126,7 +107,7 @@ const PublicPharmacyPage = () => {
 
   const whatsappNumber = (pharmacy.whatsapp_number || pharmacy.phone || '').replace(/\s+/g, '').replace(/^0/, '263');
   const whatsappUrl = `https://wa.me/${whatsappNumber}`;
-  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${pharmacy.latitude},${pharmacy.longitude}`;
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${pharmacy.lat},${pharmacy.lng}`;
 
   const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
 
@@ -148,7 +129,7 @@ const PublicPharmacyPage = () => {
                 <Badge className={cn("px-3 py-1", isOpen ? "bg-accent text-white" : "bg-muted text-muted-foreground")}>
                   {isOpen ? 'Open Now' : 'Closed'}
                 </Badge>
-                {pharmacy.mcaz_license && (
+                {(pharmacy as any).mcaz_license && (
                     <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200 gap-1">
                         <ShieldCheck className="w-3 h-3" /> MCAZ Verified
                     </Badge>
@@ -271,7 +252,7 @@ const PublicPharmacyPage = () => {
               <div className="space-y-3">
                 {days.map(day => {
                   const h = pharmacy.operating_hours?.[day];
-                  const isToday = new Date().toLocaleDateString('en-US', { weekday: 'lowercase' }) === day;
+                  const isToday = new Date().toLocaleDateString('en-US', { weekday: 'long' }).toLowerCase() === day;
                   
                   return (
                     <div key={day} className={cn(
@@ -297,14 +278,14 @@ const PublicPharmacyPage = () => {
                 <MapPin className="w-4 h-4 text-primary" />
                 Location
               </h3>
-              {isLoaded && pharmacy.latitude && pharmacy.longitude ? (
+              {isLoaded && pharmacy.lat && pharmacy.lng ? (
                 <GoogleMap
                   mapContainerStyle={mapContainerStyle}
-                  center={{ lat: pharmacy.latitude, lng: pharmacy.longitude }}
+                  center={{ lat: pharmacy.lat, lng: pharmacy.lng }}
                   zoom={15}
                   options={{ disableDefaultUI: true }}
                 >
-                  <MarkerF position={{ lat: pharmacy.latitude, lng: pharmacy.longitude }} />
+                  <MarkerF position={{ lat: pharmacy.lat, lng: pharmacy.lng }} />
                 </GoogleMap>
               ) : (
                 <div className="bg-muted animate-pulse rounded-xl h-40 flex items-center justify-center text-xs text-muted-foreground">

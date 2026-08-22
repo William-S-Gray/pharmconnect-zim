@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, MapPin, Loader2, AlertTriangle, Package, Pill } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useDebounce } from '@/hooks/use-debounce';
 import { useGeolocation, HARARE_FALLBACK } from '@/hooks/use-geolocation';
 import { type StockStatus } from '@/components/StockStatusBadge';
@@ -187,70 +187,48 @@ export function DrugSearchWidget({
       return;
     }
 
-    if (!isSupabaseConfigured) {
-      setError('Search is unavailable — Supabase is not configured.');
-      return;
-    }
-
+    
     setLoading(true);
     setError(null);
     setSearched(true);
 
     try {
-      // 1. Detect Intent
-      let currentIntent = 'UNKNOWN';
-      const { data: intentData, error: intentError } = await supabase.rpc('detect_search_intent', { p_query: q.trim() });
-      if (!intentError && intentData && intentData.intent) {
-        currentIntent = intentData.intent;
-      }
-      setIntent(currentIntent as any);
-
-      if (['SYMPTOM_COMPLEX', 'UNKNOWN'].includes(currentIntent)) {
-        // Log it silently
-        supabase.rpc('log_smart_search', { p_query: q.trim(), p_intent: currentIntent, p_city: city || '' }).then();
-        // Do not search for pharmacies if complex
-        setResults([]);
-        onResultsChange?.([]);
-        setLoading(false);
-        return;
-      }
-
-      // 2. Fetch Pharmacies for DRUG or SYMPTOM_CLEAR
-      const { data, error: rpcError } = await supabase.rpc('find_nearby_pharmacies', {
-        p_query:     q.trim(),
-        p_lat:       userLat,
-        p_lng:       userLng,
-        p_radius_km: 50,
-        p_city:      city ?? null,
+      // One request. Search returns the intent alongside the results and
+      // records the query server-side, so the three separate RPCs this
+      // replaced — detect_search_intent, find_nearby_pharmacies and two
+      // fire-and-forget log_smart_search calls — collapse into it.
+      const response = await api.search.drugs({
+        q: q.trim(),
+        lat: userLat ?? undefined,
+        lng: userLng ?? undefined,
+        radius_km: 50,
+        city: city ?? undefined,
       });
 
-      if (rpcError) throw rpcError;
+      setIntent(response.intent as any);
 
-      const mapped: DrugSearchResult[] = (data || []).map((row: any) => ({
+      const mapped: DrugSearchResult[] = response.results.map((row) => ({
         pharmacy_id:   row.pharmacy_id,
         pharmacy_name: row.pharmacy_name,
-        suburb:        row.suburb,
+        suburb:        row.suburb ?? '',
         city:          row.city,
-        phone:         row.phone,
-        lat:           row.lat,
-        lng:           row.lng,
-        drug_id:       row.drug_id,
+        phone:         row.phone ?? '',
+        lat:           row.lat ?? 0,
+        lng:           row.lng ?? 0,
+        drug_id:       row.drug_id ?? '',
         drug_name:     row.drug_name,
-        unit_price:    row.unit_price != null ? parseFloat(row.unit_price) : null,
+        // Already a number: the API client parses NUMERIC columns, so the
+        // parseFloat this replaced is no longer needed.
+        unit_price:    row.unit_price,
         quantity:      row.quantity,
         stock_status:  row.stock_status as StockStatus,
-        distance_km:   row.distance_km,
+        distance_km:   row.distance_km ?? 0,
       }));
-
-      if (mapped.length === 0) {
-        // Log zero results
-        supabase.rpc('log_smart_search', { p_query: q.trim(), p_intent: 'ZERO_RESULTS', p_city: city || '' }).then();
-      }
 
       setResults(mapped);
       onResultsChange?.(mapped);
     } catch (err: any) {
-      console.error('DrugSearchWidget RPC error:', err);
+      console.error('DrugSearchWidget search error:', err);
       setError(err?.message || 'Search failed. Please try again.');
       setResults([]);
       onResultsChange?.([]);

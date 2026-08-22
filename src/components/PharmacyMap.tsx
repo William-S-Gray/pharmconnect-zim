@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { GoogleMap, useJsApiLoader, MarkerF, InfoWindow } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader, MarkerF, InfoWindow, type Libraries } from '@react-google-maps/api';
 import { StockStatusBadge, type StockStatus } from './StockStatusBadge';
 import { getDrivingDistance, type DistanceMatrixResult } from '@/lib/googleMapsProxy';
 import { useSearchStore } from '@/stores/searchStore';
 
-const GOOGLE_MAPS_LIBRARIES: ("places" | "drawing" | "geometry" | "localContext" | "visualization")[] = ['places'];
+// Typed as the loader's own Libraries type; the hand-written union
+// included "localContext", which @react-google-maps/api dropped.
+const GOOGLE_MAPS_LIBRARIES: Libraries = ['places'];
 
 export interface PharmacyMarker {
   pharmacy_id: string;

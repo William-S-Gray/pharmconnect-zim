@@ -11,7 +11,7 @@ import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { usePagination } from '@/hooks/use-pagination';
 import { PaginationControls } from '@/components/PaginationControls';
@@ -43,32 +43,21 @@ const AdminDrugsPage = () => {
   const { data: drugs = [], isLoading } = useQuery<Drug[]>({
     queryKey: ['admin', 'drugs', catFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('drugs')
-        .select('*');
-      
-      if (catFilter !== 'ALL') query = query.eq('category', catFilter);
-      
-      const { data, error } = await query;
-      if (error) throw error;
-      return data as Drug[];
+      const { items } = await api.drugs.list({
+        category: catFilter === 'ALL' ? undefined : catFilter,
+        limit: 200,
+      });
+      return items as unknown as Drug[];
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: { id?: string; drug: DrugForm }) => {
       if (data.id) {
-        const { error } = await supabase
-          .from('drugs')
-          .update(data.drug)
-          .eq('id', data.id);
-        if (error) throw error;
+        await api.drugs.update(data.id, data.drug as any);
         return;
       }
-      const { error } = await supabase
-        .from('drugs')
-        .insert([data.drug]);
-      if (error) throw error;
+      await api.drugs.create(data.drug as any);
     },
     onSuccess: (_, vars) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });
@@ -80,11 +69,7 @@ const AdminDrugsPage = () => {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('drugs')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      await api.drugs.remove(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'drugs'] });

@@ -1,7 +1,6 @@
 import express from 'express';
 import { twiml } from 'twilio';
 import { OpenAI } from 'openai';
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 // In reality we would fetch the image URL with Twilio auth
 
@@ -19,7 +18,26 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'sk-mock' });
-const supabase = createClient(process.env.SUPABASE_URL || 'http://mock', process.env.SUPABASE_ANON_KEY || 'mock');
+/**
+ * Drug availability search via the PharmConnect API.
+ *
+ * Replaces a direct `find_nearby_pharmacies` RPC call made with a Supabase
+ * key held by this service. The search endpoint is public, so this needs no
+ * credentials at all — which is the right amount for a service that only
+ * ever reads public availability.
+ */
+const API_URL = process.env.API_URL ?? 'http://localhost:4000';
+
+async function searchDrugs(query, { city = null, limit = 3 } = {}) {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
+  if (city) params.set('city', city);
+
+  const response = await fetch(`${API_URL}/api/search?${params}`);
+  if (!response.ok) throw new Error(`Search failed: HTTP ${response.status}`);
+
+  const { results } = await response.json();
+  return results;
+}
 
 app.post('/webhook/whatsapp', async (req, res) => {
   const incomingMsg = req.body.Body?.trim() || '';
@@ -71,20 +89,24 @@ app.post('/webhook/whatsapp', async (req, res) => {
       drugName = incomingMsg; // Skipping the text-parsing for brevity in this PoC
     }
 
-    // 3. Query Supabase
+    // 3. Query the API
     if (drugName) {
-      const { data, error } = await supabase.rpc('find_nearby_pharmacies', {
-        p_query: drugName,
-        p_lat: null, p_lng: null, p_radius_km: 50, p_city: 'Harare'
-      });
+      let results = [];
+      try {
+        results = await searchDrugs(drugName, { city: 'Harare', limit: 3 });
+      } catch (err) {
+        console.error('[whatsapp] search failed:', err.message);
+      }
 
-      if (error || !data || data.length === 0) {
+      if (results.length === 0) {
         msg.body(`❌ Sorry, I couldn't find *${drugName}* locally right now.`);
       } else {
-        const results = data.slice(0, 3);
         let reply = `✅ *${drugName}* found at ${results.length} pharmacies:\n\n`;
         results.forEach((r, i) => {
-          reply += `*${i + 1}. ${r.pharmacy_name}*\n📍 ${r.suburb}\n💵 $${parseFloat(r.unit_price || '0').toFixed(2)}\n📞 ${r.phone}\n\n`;
+          // unit_price arrives as a number; the parseFloat this replaced
+          // silently produced NaN whenever the price was null.
+          const price = r.unit_price == null ? 'price on request' : `$${r.unit_price.toFixed(2)}`;
+          reply += `*${i + 1}. ${r.pharmacy_name}*\n📍 ${r.suburb}\n💵 ${price}\n📞 ${r.phone}\n\n`;
         });
         reply += `Reply "RESERVE 1" to reserve at ${results[0].pharmacy_name} instantly.`;
         msg.body(reply);

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Loader2, Phone, Stethoscope, HeartHandshake } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -38,17 +38,15 @@ export function RequestDrugModal({ isOpen, onClose, initialQuery = '', city = 'H
 
     setIsSubmitting(true);
     try {
-      const { error } = await supabase.from('drug_requests').insert([
-        {
-          requested_query: requestedQuery.trim(),
-          city,
-          contact_info: contactInfo.trim() || null,
-          notes: notes.trim() || null,
-          status: 'PENDING'
-        }
-      ]);
-
-      if (error) throw error;
+      // Goes to drug_wanted_requests, not drug_requests. Those were two
+      // different tables sharing one name across two migrations; this form
+      // was writing columns the surviving table did not have.
+      await api.wanted.create({
+        requested_query: requestedQuery.trim(),
+        city,
+        contact_info: contactInfo.trim() || undefined,
+        notes: notes.trim() || undefined,
+      });
 
       setIsSuccess(true);
       toast.success('Drug request submitted!', {

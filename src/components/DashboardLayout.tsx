@@ -1,7 +1,7 @@
 import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
 import { Pill, LayoutDashboard, Package, Bell, CreditCard, Settings, LogOut, Shield, MessageCircle, CheckSquare, Users, ShieldAlert, Trash2, BarChart3, AlertTriangle, ShoppingBag, Zap } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
@@ -34,53 +34,17 @@ export function DashboardLayout({ children }: { children?: React.ReactNode }) {
   const navigate = useNavigate();
   const { pharmacy, role, profile, logout } = useAuth();
   
-  const { data: pendingCount = 0 } = useQuery({
-    queryKey: ['pharmacy', 'pending-delete-count', pharmacy?.id],
-    queryFn: async () => {
-      if (!pharmacy?.id) return 0;
-      const { count, error } = await supabase
-        .from('delete_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('pharmacy_id', pharmacy.id)
-        .eq('status', 'PENDING');
-      if (error) return 0;
-      return count || 0;
-    },
-    enabled: !!pharmacy?.id && role === 'pharmacy_admin',
-    refetchInterval: 30000,
-  });
-
-  const { data: conflictsCount = 0 } = useQuery({
-    queryKey: ['pharmacy', 'conflicts-count', pharmacy?.id],
-    queryFn: async () => {
-      if (!pharmacy?.id) return 0;
-      const { count, error } = await supabase
-        .from('sync_conflicts')
-        .select('*', { count: 'exact', head: true })
-        .eq('pharmacy_id', pharmacy.id)
-        .eq('status', 'PENDING');
-      if (error) return 0;
-      return count || 0;
-    },
-    enabled: !!pharmacy?.id && role === 'pharmacy_admin',
-    refetchInterval: 30000,
-  });
-
-  const { data: reservationsCount = 0 } = useQuery({
-    queryKey: ['pharmacy', 'reservations-count', pharmacy?.id],
-    queryFn: async () => {
-      if (!pharmacy?.id) return 0;
-      const { count, error } = await supabase
-        .from('drug_reservations')
-        .select('*', { count: 'exact', head: true })
-        .eq('pharmacy_id', pharmacy.id)
-        .eq('status', 'PENDING');
-      if (error) return 0;
-      return count || 0;
-    },
+  // One request for every badge, rather than three head-count queries on
+  // separate intervals.
+  const { data: counts } = useQuery({
+    queryKey: ['pharmacy', 'counts', pharmacy?.id],
+    queryFn: () => api.pharmacies.counts(pharmacy!.id),
     enabled: !!pharmacy?.id,
-    refetchInterval: 20000,
+    refetchInterval: 30000,
   });
+  const pendingCount = role === 'pharmacy_admin' ? counts?.pending_deletes ?? 0 : 0;
+  const conflictsCount = role === 'pharmacy_admin' ? counts?.conflicts ?? 0 : 0;
+  const reservationsCount = counts?.reservations ?? 0;
 
   const handleLogout = () => {
     logout();

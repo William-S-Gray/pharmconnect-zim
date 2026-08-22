@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Mail, Bell, MapPin, Smartphone, Send } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 
 interface AlertPreferences {
@@ -35,13 +35,7 @@ const LoginAlertSettings = () => {
     queryKey: ['security', 'alert-prefs', pharmacy?.id],
     queryFn: async () => {
       if (!pharmacy?.id) return DEFAULT_PREFS;
-      const { data, error } = await supabase
-        .from('pharmacies')
-        .select('email, notify_new_device, notify_new_location, notify_failed_attempt, notify_password_change')
-        .eq('id', pharmacy.id)
-        .single();
-      
-      if (error) return DEFAULT_PREFS;
+      const data = await api.pharmacies.get(pharmacy.id) as any;
       return {
         email: data.email || '',
         notify_new_device: data.notify_new_device ?? true,
@@ -67,11 +61,12 @@ const LoginAlertSettings = () => {
   const saveMutation = useMutation({
     mutationFn: async (data: AlertPreferences) => {
       if (!pharmacy?.id) throw new Error('Not logged in');
-      const { error } = await supabase
-        .from('pharmacies')
-        .update(data)
-        .eq('id', pharmacy.id);
-      if (error) throw error;
+      // `email` is intentionally excluded: changing where security alerts
+      // are delivered is exactly the move an attacker makes first, so it
+      // belongs with the pharmacy's contact details, not behind a toggle
+      // list. The notify_* flags are the only fields this form owns.
+      const { email: _address, ...flags } = data;
+      await api.pharmacies.update(pharmacy.id, flags as any);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['security', 'alert-prefs'] });
@@ -82,11 +77,11 @@ const LoginAlertSettings = () => {
   });
 
   const testMutation = useMutation({
-    mutationFn: async () => {
-      toast.success('System: In production, Supabase Edge Functions or triggers will handle these emails.');
-    },
-    onSuccess: () => toast.success(`Test email sent to ${form.email}`),
-    onError: () => toast.error('Failed to send test email'),
+    // Goes to the signed-in user's own address, which is the only one the
+    // server will send to.
+    mutationFn: () => api.profile.sendTestEmail(),
+    onSuccess: (result) => toast.success(`Test email sent to ${result.sent_to}`),
+    onError: (err: any) => toast.error(err?.message || 'Failed to send test email'),
   });
 
   const alerts = [

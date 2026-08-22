@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 
 interface Props {
   children: React.ReactNode;
-  /** Optional fallback pharmacy phone in case Supabase is down */
+  /** Optional fallback pharmacy phone in case the backend is unreachable */
   fallbackPhone?: string;
   /** Section label shown in error message e.g. "search results" */
   section?: string;
@@ -13,27 +13,27 @@ interface Props {
 interface State {
   hasError: boolean;
   errorMessage: string;
-  isSupabaseDown: boolean;
+  isBackendDown: boolean;
 }
 
 export class ErrorBoundary extends React.Component<Props, State> {
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, errorMessage: '', isSupabaseDown: false };
+    this.state = { hasError: false, errorMessage: '', isBackendDown: false };
   }
 
   static getDerivedStateFromError(error: Error): State {
     const msg = error?.message || '';
-    const isSupabaseDown =
+    const isBackendDown =
       msg.includes('fetch') ||
       msg.includes('network') ||
-      msg.includes('supabase') ||
+      msg.includes('Cannot reach the server') ||
       msg.includes('Failed to load');
 
     return {
       hasError: true,
       errorMessage: msg,
-      isSupabaseDown,
+      isBackendDown,
     };
   }
 
@@ -42,11 +42,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   handleRetry = () => {
-    this.setState({ hasError: false, errorMessage: '', isSupabaseDown: false });
+    this.setState({ hasError: false, errorMessage: '', isBackendDown: false });
   };
 
   render() {
-    const { hasError, isSupabaseDown } = this.state;
+    const { hasError, isBackendDown } = this.state;
     const { section = 'this section', fallbackPhone } = this.props;
 
     if (!hasError) return this.props.children;
@@ -67,13 +67,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
         </div>
 
         <h2 className="font-heading font-bold text-lg text-foreground mb-2">
-          {isSupabaseDown
+          {isBackendDown
             ? 'Connection problem'
             : `Something went wrong in ${section}`}
         </h2>
 
         <p className="text-sm text-muted-foreground mb-5 max-w-sm leading-relaxed">
-          {isSupabaseDown
+          {isBackendDown
             ? "We're having trouble reaching our servers right now. This is usually temporary — please try again in a moment."
             : 'An unexpected error occurred. Refreshing this section usually fixes it.'}
         </p>

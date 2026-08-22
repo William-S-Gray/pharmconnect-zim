@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { supabase } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ExportDropdown } from '@/components/ExportDropdown';
 import { exportCSV, exportExcel } from '@/lib/adminExportUtils';
@@ -41,9 +41,8 @@ const AdminAnalyticsPage = () => {
   const { data: pharmaciesList = [] } = useQuery({
     queryKey: ['admin', 'pharmacies_simple_list'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('pharmacies').select('id, name').order('name');
-      if (error) throw error;
-      return data || [];
+      const { items } = await api.pharmacies.list({ limit: 200 });
+      return items.map((p) => ({ id: p.id, name: p.name }));
     },
     enabled: role === 'super_admin'
   });
@@ -51,97 +50,61 @@ const AdminAnalyticsPage = () => {
   const { data, isLoading } = useQuery<AnalyticsData>({
     queryKey: ['admin', 'analytics', dateFrom?.toISOString(), dateTo?.toISOString(), effectivePharmacyId],
     queryFn: async () => {
-      // 1. Fetch total pharmacies (Super Admin only or return 1 for Pharmacy Admin)
-      let pharmacyCount = 0;
-      if (role === 'super_admin') {
-        const { count } = await supabase
-          .from('pharmacies')
-          .select('*', { count: 'exact', head: true });
-        pharmacyCount = count || 0;
-      } else {
-        pharmacyCount = 1;
-      }
-        
-      // 2. Fetch total drugs (scoped)
-      let drugQuery = supabase.from('pharmacy_stock').select('id', { count: 'exact', head: true });
-      if (effectivePharmacyId) {
-        drugQuery = drugQuery.eq('pharmacy_id', effectivePharmacyId);
-      }
-      const { count: inventoryCount } = await drugQuery;
-        
-      // 3. Fetch city breakdown (Super Admin mainly)
-      let cityBreakdown: { city: string; count: number }[] = [];
-      if (role === 'super_admin' && !effectivePharmacyId) {
-        const { data: cities } = await supabase.from('pharmacies').select('city');
-        const cityMap: Record<string, number> = {};
-        cities?.forEach(c => { if (c.city) cityMap[c.city] = (cityMap[c.city] || 0) + 1; });
-        cityBreakdown = Object.entries(cityMap).map(([city, count]) => ({ city, count }));
-      }
-
-      // 4. Registration Trend (scoped)
-      let regQuery = supabase.from('profiles').select('created_at');
-      if (effectivePharmacyId) {
-        // For pharmacy admin, show their staff registrations
-        const { data: staffMembers } = await supabase.from('memberships').select('user_id').eq('pharmacy_id', effectivePharmacyId);
-        const staffIds = staffMembers?.map(m => m.user_id) || [];
-        regQuery = regQuery.in('id', staffIds);
-      }
-      
-      const { data: regs } = await regQuery;
-      const trendMap: Record<string, number> = {};
-      regs?.forEach(r => {
-        const month = format(new Date(r.created_at), 'MMM yyyy');
-        trendMap[month] = (trendMap[month] || 0) + 1;
+      // One request. This replaced six browser-side queries plus
+      // client-side bucketing: cities counted with a JS map, registrations
+      // grouped by a formatted month string and then sorted by parsing
+      // that string back into a Date, and stock health computed by pulling
+      // every stock row and filtering it three times. All of it is SQL now.
+      const overview = await api.admin.analyticsOverview({
+        pharmacy_id: effectivePharmacyId || undefined,
       });
-      const registrationTrend = Object.entries(trendMap)
-        .map(([month, pharmacies]) => ({ month, pharmacies }))
-        .sort((a, b) => new Date(a.month).getTime() - new Date(b.month).getTime());
 
-      // 5. Stock Distribution (scoped)
-      let stockDist: { name: string; value: number; color: string }[] = [];
-      let stockQuery = supabase.from('pharmacy_stock').select('quantity, threshold, is_available');
-      if (effectivePharmacyId) stockQuery = stockQuery.eq('pharmacy_id', effectivePharmacyId);
-      
-      const { data: stockData } = await stockQuery;
-      if (stockData?.length) {
-        const inStock = stockData.filter(s => s.is_available && s.quantity > s.threshold).length;
-        const lowStock = stockData.filter(s => s.is_available && s.quantity > 0 && s.quantity <= s.threshold).length;
-        const outOfStock = stockData.filter(s => !s.is_available || s.quantity === 0).length;
-        
-        const total = stockData.length;
-        stockDist = [
-          { name: 'In Stock', value: Math.round((inStock / total) * 100), color: '#10b981' },
-          { name: 'Low Stock', value: Math.round((lowStock / total) * 100), color: '#f59e0b' },
-          { name: 'Out of Stock', value: Math.round((outOfStock / total) * 100), color: '#ef4444' },
-        ];
-      }
+      const dist = overview.stock_distribution;
+      const totalStock = dist.in_stock + dist.low_stock + dist.out_of_stock;
+      const pct = (n: number) => (totalStock ? Math.round((n / totalStock) * 100) : 0);
 
-      // 6. Top Drugs (by stock volume or searches if logs existed)
-      let topDrugs: { name: string; searches: number }[] = [];
-      let topQuery = supabase.from('pharmacy_stock').select(`
-        quantity,
-        drugs (generic_name, common_name)
-      `).order('quantity', { ascending: false }).limit(5);
-      if (effectivePharmacyId) topQuery = topQuery.eq('pharmacy_id', effectivePharmacyId);
-      
-      const { data: topData } = await topQuery;
-      topDrugs = (topData || []).map((s: any) => ({
-        name: s.drugs.common_name || s.drugs.generic_name,
-        searches: s.quantity
-      }));
+      const stockDist = totalStock
+        ? [
+            { name: 'In Stock', value: pct(dist.in_stock), color: '#10b981' },
+            { name: 'Low Stock', value: pct(dist.low_stock), color: '#f59e0b' },
+            { name: 'Out of Stock', value: pct(dist.out_of_stock), color: '#ef4444' },
+          ]
+        : [];
 
       return {
         summary: [
-          { label: effectivePharmacyId ? 'Staff Count' : 'Total Pharmacies', value: effectivePharmacyId ? registrationTrend.reduce((a,b) => a + b.pharmacies, 0).toString() : (pharmacyCount || 0).toString() },
-          { label: 'Inventory Items', value: (inventoryCount || 0).toString() },
-          { label: 'Stock Health', value: stockDist.find(s => s.name === 'In Stock')?.value + '%' || '0%' },
-          { label: 'System Uptime', value: '99.9%' },
+          {
+            label: effectivePharmacyId ? 'Inventory Items' : 'Total Pharmacies',
+            value: String(effectivePharmacyId ? overview.inventory_count : overview.pharmacy_count),
+          },
+          { label: 'Inventory Items', value: String(overview.inventory_count) },
+          { label: 'Stock Health', value: `${pct(dist.in_stock)}%` },
+          // Was hardcoded to '99.9%'. Nothing measures uptime, so it now
+          // reports the search volume it can actually account for.
+          {
+            label: 'Searches (30d)',
+            value: String(overview.daily_searches.reduce((a, b) => a + Number(b.searches), 0)),
+          },
         ],
-        daily_searches: [],
+        daily_searches: overview.daily_searches.map((row) => ({
+          day: row.day,
+          searches: Number(row.searches),
+        })),
         stock_distribution: stockDist,
-        top_drugs: topDrugs,
-        registration_trend: registrationTrend.length > 0 ? registrationTrend : [{ month: format(new Date(), 'MMM yyyy'), pharmacies: 0 }],
-        city_breakdown: cityBreakdown,
+        top_drugs: overview.top_drugs.map((t) => ({
+          name: t.name,
+          searches: Number(t.searches),
+        })),
+        registration_trend: overview.registration_trend.length
+          ? overview.registration_trend.map((r) => ({
+              month: r.month,
+              pharmacies: Number(r.pharmacies),
+            }))
+          : [{ month: format(new Date(), 'yyyy-MM'), pharmacies: 0 }],
+        city_breakdown: overview.city_breakdown.map((c) => ({
+          city: c.city,
+          count: Number(c.count),
+        })),
       };
     },
     placeholderData: fallbackData,

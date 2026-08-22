@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import { useServerPagination } from '@/hooks/use-server-pagination';
 import { useDebounce } from '@/hooks/use-debounce';
 import { PaginationControls } from '@/components/PaginationControls';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -56,237 +56,133 @@ const StockManagementPage = () => {
 
   // ── Real-time stock subscription ────────────────────────────────────────
   useEffect(() => {
-    if (!pharmacy?.id || !isSupabaseConfigured) return;
+    if (!pharmacy?.id) return;
 
-    const channel = supabase
-      .channel(`stock-rt-${pharmacy.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'pharmacy_stock',
-          filter: `pharmacy_id=eq.${pharmacy.id}`,
-        },
-        (payload) => {
-          // Invalidate and re-fetch
-          queryClient.invalidateQueries({ queryKey: ['stock', pharmacy.id] });
-          // Flash the updated row
-          const changedId = (payload.new as any)?.id || (payload.old as any)?.id;
-          if (changedId) {
-            setFlashedIds(prev => new Set(prev).add(changedId));
-            if (flashTimers.current[changedId]) clearTimeout(flashTimers.current[changedId]);
-            flashTimers.current[changedId] = setTimeout(() => {
-              setFlashedIds(prev => { const next = new Set(prev); next.delete(changedId); return next; });
-            }, 2000);
-          }
+    return api.subscribeToChanges(
+      (event) => {
+        if (event.pharmacy_id !== pharmacy.id) return;
+        queryClient.invalidateQueries({ queryKey: ['stock', pharmacy.id] });
+
+        // Flash the row that changed. The event carries its id, which is
+        // all this needs — the refetched query supplies the contents.
+        const changedId = event.id;
+        if (changedId) {
+          setFlashedIds(prev => new Set(prev).add(changedId));
+          if (flashTimers.current[changedId]) clearTimeout(flashTimers.current[changedId]);
+          flashTimers.current[changedId] = setTimeout(() => {
+            setFlashedIds(prev => { const next = new Set(prev); next.delete(changedId); return next; });
+          }, 2000);
         }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+      },
+      { tables: ['pharmacy_stock'] },
+    );
   }, [pharmacy?.id, queryClient]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['stock', pharmacy?.id, debouncedSearch, filter, page, pageSize],
     queryFn: async () => {
       if (!pharmacy?.id) return { items: [], totalCount: 0 };
-      
-      let query = supabase
-        .from('pharmacy_stock')
-        .select(`
-          id,
-          drug_id,
-          quantity,
-          unit_price,
-          threshold,
-          expiry_date,
-          is_available,
-          drugs!drug_id (
-            generic_name,
-            common_name,
-            strength,
-            form
-          )
-        `, { count: 'exact' })
-        .eq('pharmacy_id', pharmacy.id);
 
-      // Status filters
-      if (filter === 'OUT_OF_STOCK') {
-        query = query.or('quantity.eq.0,is_available.eq.false');
-      } else if (filter === 'LOW_STOCK') {
-        query = query.filter('quantity', 'lte', 'threshold').eq('is_available', true).gt('quantity', 0);
-      } else if (filter === 'IN_STOCK') {
-        query = query.gt('quantity', 'threshold').eq('is_available', true);
-      }
-
-      // Search (Generic or Common Name)
-      if (debouncedSearch) {
-        query = query.or(`generic_name.ilike.%${debouncedSearch}%,common_name.ilike.%${debouncedSearch}%`, { foreignTable: 'drugs' });
-      }
-
-      // Pagination
-      const from = (page - 1) * pageSize;
-      const to = from + pageSize - 1;
-      
-      const { data: stockData, error, count } = await query
-        .range(from, to)
-        .order('id', { ascending: false });
-        
-      if (error) throw error;
-      
-      const items = (stockData || []).map((s: any) => {
-        const drug = s.drugs;
-        const qty = s.quantity || 0;
-        const thresh = s.threshold || 0;
-        const avail = s.is_available;
-        
-        let stock_status: StockStatus = 'IN_STOCK';
-        if (!avail || qty === 0) stock_status = 'OUT_OF_STOCK';
-        else if (qty <= thresh) stock_status = 'LOW_STOCK';
-
-        return {
-          id: s.id,
-          drug_id: s.drug_id,
-          drugName: drug?.common_name || drug?.generic_name || 'Unknown Drug',
-          common_name: drug?.common_name,
-          strength: drug?.strength || '',
-          form: drug?.form || '',
-          quantity: qty,
-          unit_price: s.unit_price || 0,
-          threshold: thresh,
-          expiry_date: s.expiry_date || '',
-          is_available: avail,
-          stock_status,
-        };
+      // Filtering, searching, paging and the stock_status computation all
+      // happen in SQL now. The version this replaces built a PostgREST
+      // filter chain in the browser, including a `quantity <= threshold`
+      // comparison expressed as a literal string.
+      const response = await api.stock.list(pharmacy.id, {
+        search: debouncedSearch || undefined,
+        status: filter,
+        limit: pageSize,
+        offset: (page - 1) * pageSize,
       });
 
-      return { items, totalCount: count || 0 };
+      const items = response.items.map((s) => ({
+        id: s.id,
+        drug_id: s.drug_id ?? '',
+        drugName: s.drug_name,
+        common_name: s.drug_name,
+        strength: s.strength || '',
+        form: s.form || '',
+        quantity: s.quantity,
+        unit_price: s.unit_price ?? 0,
+        threshold: s.threshold,
+        expiry_date: s.expiry_date || '',
+        is_available: s.is_available,
+        stock_status: s.stock_status as StockStatus,
+      }));
+
+      return { items, totalCount: response.total };
     },
-    enabled: !!pharmacy?.id && isSupabaseConfigured,
+    enabled: !!pharmacy?.id,
   });
 
   const stockItems = data?.items || [];
   const totalItems = data?.totalCount || 0;
   const totalPages = Math.ceil(totalItems / pageSize);
 
+  /**
+   * Whether the write was queued for approval rather than applied.
+   *
+   * Staff edits become pending_approvals rows; admin edits apply directly.
+   * That decision is the server's — this used to be an `if (role === ...)`
+   * branch here, which meant the rule lived in the browser and anyone
+   * bypassing the UI simply wrote to the table.
+   */
+  const wasQueued = (result: unknown) =>
+    !!result && typeof result === 'object' && 'pending' in (result as object);
+
   const addMutation = useMutation({
     mutationFn: async (payload: any) => {
-      if (role === 'pharmacy_staff') {
-        const { error } = await supabase
-          .from('pending_approvals')
-          .insert([{
-            pharmacy_id: pharmacy?.id,
-            requester_id: user?.id,
-            action_type: 'CREATE',
-            table_name: 'pharmacy_stock',
-            payload
-          }]);
-        if (error) throw error;
-        toast.info('Request sent to admin for approval');
-        return;
-      }
-
       if (!navigator.onLine) {
-        syncManager.enqueue('pharmacy_stock', 'INSERT', { ...payload, pharmacy_id: pharmacy?.id }, { userId: user?.id, pharmacyId: pharmacy?.id });
-        return;
+        syncManager.enqueue('pharmacy_stock', 'INSERT', { ...payload }, { userId: user?.id, pharmacyId: pharmacy?.id });
+        return null;
       }
-
-      const { error } = await supabase
-        .from('pharmacy_stock')
-        .insert([{ ...payload, pharmacy_id: pharmacy?.id }]);
-      if (error) throw error;
+      return api.stock.create(pharmacy!.id, payload);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      if (role !== 'pharmacy_staff') toast.success('Drug added to inventory');
+      if (wasQueued(result)) toast.info('Request sent to admin for approval');
+      else if (result) toast.success('Drug added to inventory');
     },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to add drug');
-    },
+    onError: (error: any) => toast.error(error.message || 'Failed to add drug'),
   });
 
   const updateMutation = useMutation({
     mutationFn: async ({ drugId, data }: { drugId: string; data: any }) => {
-      if (role === 'pharmacy_staff') {
-        const { error } = await supabase
-          .from('pending_approvals')
-          .insert([{
-            pharmacy_id: pharmacy?.id,
-            requester_id: user?.id,
-            action_type: 'UPDATE',
-            table_name: 'pharmacy_stock',
-            target_id: drugId,
-            payload: data
-          }]);
-        if (error) throw error;
-        toast.info('Update request sent to admin');
-        return;
-      }
-
       if (!navigator.onLine) {
         syncManager.enqueue('pharmacy_stock', 'UPDATE', { id: drugId, ...data }, { userId: user?.id, pharmacyId: pharmacy?.id });
-        return;
+        return null;
       }
-
-      const { error } = await supabase
-        .from('pharmacy_stock')
-        .update(data)
-        .eq('id', drugId);
-      if (error) throw error;
+      return api.stock.update(pharmacy!.id, drugId, data);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      if (role !== 'pharmacy_staff') toast.success('Drug updated');
+      if (wasQueued(result)) toast.info('Update request sent to admin');
+      else if (result) toast.success('Drug updated');
     },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to update drug');
-    },
+    onError: (error: any) => toast.error(error.message || 'Failed to update drug'),
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (drugId: string) => {
-      if (role === 'pharmacy_staff') {
-        const { error } = await supabase
-          .from('pending_approvals')
-          .insert([{
-            pharmacy_id: pharmacy?.id,
-            requester_id: user?.id,
-            action_type: 'DELETE',
-            table_name: 'pharmacy_stock',
-            target_id: drugId,
-            payload: {}
-          }]);
-        if (error) throw error;
-        toast.info('Delete request sent to admin');
-        return;
-      }
-
       if (!navigator.onLine) {
         syncManager.enqueue('pharmacy_stock', 'DELETE', { id: drugId }, { userId: user?.id, pharmacyId: pharmacy?.id });
-        return;
+        return null;
       }
-
-      const { error } = await supabase
-        .from('pharmacy_stock')
-        .delete()
-        .eq('id', drugId);
-      if (error) throw error;
+      return api.stock.remove(pharmacy!.id, drugId);
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['stock'] });
-      if (role !== 'pharmacy_staff') toast.success('Drug removed from inventory');
+      if (wasQueued(result)) toast.info('Delete request sent to admin');
+      else toast.success('Drug removed from inventory');
     },
-    onError: (error: any) => {
-      toast.error(error.message || 'Failed to remove drug');
-    },
+    onError: (error: any) => toast.error(error.message || 'Failed to remove drug'),
   });
 
   const handleAddDrug = (formData: StockFormData) => {
     addMutation.mutate({
-      drug_id: formData.drugId,
+      drug_id: formData.drugId || null,
+      drug_name: formData.drugName,
+      strength: formData.strength || null,
+      form: formData.form || null,
       quantity: formData.quantity,
       unit_price: formData.unitPrice,
       threshold: formData.threshold,
@@ -324,22 +220,26 @@ const StockManagementPage = () => {
     for (let i = 0; i < total; i += CHUNK_SIZE) {
       const chunk = rows.slice(i, i + CHUNK_SIZE);
       const formatted = chunk.map(r => ({
-        pharmacy_id: pharmacy?.id,
-        drug_id: r.matchedDrugId, // Use the correct ID from matching
+        drug_id: r.matchedDrugId || null,
+        // drug_name is required and denormalised, so an imported row still
+        // displays when it matches nothing in the catalogue.
+        drug_name: r.drugName || r.drug_name || r.name || 'Unknown',
+        strength: r.strength || null,
+        form: r.form || null,
         quantity: r.quantity,
         unit_price: r.unit_price,
         threshold: r.threshold || 10,
         expiry_date: r.expiry_date || null,
-        is_available: true
+        is_available: true,
       }));
 
-      const { error } = await supabase
-        .from('pharmacy_stock')
-        .upsert(formatted, { onConflict: 'pharmacy_id,drug_id' });
-
-      if (error) {
-        console.error('Import chunk error:', error);
-        throw new Error(`Failed at row ${i + 1}: ${error.message}`);
+      // One transaction per chunk on the server, so a chunk either lands
+      // entirely or not at all.
+      try {
+        await api.stock.bulkImport(pharmacy!.id, formatted);
+      } catch (err: any) {
+        console.error('Import chunk error:', err);
+        throw new Error(`Failed at row ${i + 1}: ${err.message}`);
       }
 
       processed += chunk.length;

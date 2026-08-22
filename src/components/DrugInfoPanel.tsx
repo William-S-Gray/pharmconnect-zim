@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { supabase, isSupabaseConfigured } from '@/lib/supabaseClient';
+import { api } from '@/lib/api';
 
 // ─── Local fallback drug database (top Zimbabwean drugs) ────────────────────
 const LOCAL_DRUG_INFO: Record<string, DrugInfo> = {
@@ -204,16 +204,14 @@ export function DrugInfoPanel({ drugQuery, drugId, onClose, compact = false }: D
       setShowAllSideEffects(false);
       setShowInteractions(false);
 
-      // 1. Try Supabase drugs table (if it has the extended columns)
-      if (isSupabaseConfigured && drugId) {
+      // 1. Ask the catalogue. Only entries with reviewed clinical copy
+      //    carry a dosage; the rest fall through to the local map below
+      //    rather than rendering blank sections with the same authority.
+      if (drugId) {
         try {
-          const { data, error } = await supabase
-            .from('drugs')
-            .select('generic_name, common_name, drug_class, category, uses, dosage, side_effects, warnings, interactions, storage, pregnancy_category, is_controlled')
-            .eq('id', drugId)
-            .single();
+          const data = await api.drugs.get(drugId) as any;
 
-          if (!error && data && data.dosage) {
+          if (data && data.dosage) {
             setInfo({
               generic_name: data.generic_name || '',
               common_name: data.common_name || '',
@@ -225,8 +223,11 @@ export function DrugInfoPanel({ drugQuery, drugId, onClose, compact = false }: D
               warnings: data.warnings || '',
               interactions: Array.isArray(data.interactions) ? data.interactions : [],
               storage: data.storage || 'Store below 25°C.',
-              pregnancy: data.pregnancy_category || 'Consult your doctor.',
-              controlled: data.is_controlled || false,
+              // Column names are `pregnancy` and `controlled`; the previous
+              // code selected pregnancy_category and is_controlled, which
+              // no migration ever defined.
+              pregnancy: data.pregnancy || 'Consult your doctor.',
+              controlled: data.controlled || false,
             });
             setSource('db');
             setLoading(false);

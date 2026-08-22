@@ -3,8 +3,10 @@ main = "src/index.js"
 compatibility_date = "2024-04-12"
 
 [vars]
-SUPABASE_URL = "https://your-project.supabase.co"
-# DO NOT store service role keys here in production! Use Cloudflare Secrets.
+# The PharmConnect API this worker fronts. Only the public search route is
+# cached here, so no credentials are needed — unlike the Supabase anon key
+# this replaced, which was checked into this file.
+API_URL = "https://api.your-domain.co.zw"
 
 [env.production]
 name = "pharmconnect-edge-cache-prod"
