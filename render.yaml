@@ -16,8 +16,12 @@ services:
   - type: web
     name: pharmconnect-api
     runtime: node
-    plan: starter          # free tier idles out; SSE clients reconnect, but
-                           # the first request after a sleep is slow
+    # Free spins down after ~15 minutes idle: the next request pays a
+    # cold start of up to a minute, and the SSE listener's Postgres LISTEN
+    # connection dies with the instance (clients reconnect, but realtime is
+    # dead until someone wakes it). Fine pre-launch. Move to `starter`
+    # before real pharmacies depend on it.
+    plan: free
     region: oregon
     rootDir: server
     buildCommand: npm ci
