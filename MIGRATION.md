@@ -385,7 +385,14 @@ restriction pointless. See `GOOGLE_MAPS_GUIDE.md`.
 4. **Email deliverability.** Sending works, but a new domain lands in spam
    without DNS records. Set SPF, DKIM and DMARC for whatever domain
    `EMAIL_FROM` uses — a password reset in the junk folder is the same as
-   no password reset.
+   no password reset. The records and the order to add them are in
+   `DEPLOYMENT.md`; `server/test/check-email-dns.sh <domain>` verifies
+   them.
+
+   Blocked on two things that do not exist yet: a registered domain and a
+   provider. `pharmconnect.co.zw`, which `WHATSAPP_AI_AGENT.md` prints to
+   users, and `pharmtrack.co.zw` in `ADMIN_ACCESS.md` both return
+   NXDOMAIN — they are placeholders, not the project's domain.
 
 ---
 
