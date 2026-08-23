@@ -42,6 +42,13 @@ render blueprint launch      # reads render.yaml
 Or connect the repo in the Render dashboard with root directory `server`,
 build `npm ci`, start `node src/index.js`, health check `/health`.
 
+**The blueprint asks for `starter`, not `free`.** Free spins down after
+~15 minutes idle; measured on it, the first request after a sleep took 22
+seconds, and the SSE listener's Postgres `LISTEN` connection dies with the
+instance, so realtime stays dead until someone wakes it. Changing the plan
+is a billing decision, and Render will not act on the line in `render.yaml`
+until the blueprint is synced or the plan is changed in the dashboard.
+
 ### Environment
 
 | Variable | Notes |
@@ -54,6 +61,7 @@ build `npm ci`, start `node src/index.js`, health check `/health`.
 | `TRUST_PROXY` | `true` on Render. Without it the login rate limiter sees the proxy's IP for every request |
 | `NODE_ENV` | `production` — switches cookies to `Secure` + `SameSite=None` |
 | `GOOGLE_MAPS_API_KEY` | Server-side key, distinct from the browser one |
+| `MAPS_HOURLY_BUDGET` | Optional, default 1000. Ceiling on Google-billed lookups per hour across all callers — the per-caller rate limit does nothing about many callers |
 | `SMTP_*`, `EMAIL_FROM` | Without these, password reset cannot be delivered |
 
 ### After first deploy
@@ -151,3 +159,7 @@ instead.
   start of several seconds. The health check keeps it warm on paid plans.
 - **Email needs DNS.** Sending works without SPF/DKIM/DMARC, but a
   password reset in a spam folder is the same as no password reset.
+- **Rate limits are per instance and held in memory.** Running two API
+  instances doubles every public limit, and a deploy resets the counters.
+  One instance is the assumption; scaling out needs a shared store rather
+  than a bigger number. See "Rate limiting" in `MIGRATION.md`.

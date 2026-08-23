@@ -16,12 +16,15 @@ services:
   - type: web
     name: pharmconnect-api
     runtime: node
-    # Free spins down after ~15 minutes idle: the next request pays a
-    # cold start of up to a minute, and the SSE listener's Postgres LISTEN
-    # connection dies with the instance (clients reconnect, but realtime is
-    # dead until someone wakes it). Fine pre-launch. Move to `starter`
-    # before real pharmacies depend on it.
-    plan: free
+    # Not `free`, which spins down after ~15 minutes idle. Measured on the
+    # free plan, the first request after a sleep took 22 seconds — and the
+    # SSE listener's Postgres LISTEN connection dies with the instance, so
+    # realtime stays dead until someone wakes it. A pharmacy checking stock
+    # cannot wait that long, and a patient will assume the site is broken.
+    #
+    # `starter` stays resident. It is a paid plan: changing this line and
+    # syncing the blueprint starts billing.
+    plan: starter
     region: oregon
     rootDir: server
     buildCommand: npm ci
@@ -73,6 +76,14 @@ services:
       # key, which is referrer-restricted and scoped to Maps JavaScript only.
       - key: GOOGLE_MAPS_API_KEY
         sync: false
+
+      # Ceiling on Google-billed lookups per hour across every caller.
+      # The per-caller limit in lib/rateLimit.js does nothing about many
+      # callers, and the bill does not care how the traffic was spread.
+      # Well above real traffic; lower it if the account is billed harder
+      # than expected.
+      - key: MAPS_HOURLY_BUDGET
+        value: "1000"
 
       # SMTP. Without these, password reset and invitations cannot be
       # delivered and the server warns loudly at boot.

@@ -2,6 +2,7 @@ import express from 'express';
 import { z, parse } from '../lib/validate.js';
 import { env } from '../env.js';
 import { wrap, badRequest, notFound } from '../lib/errors.js';
+import { mapsLimit, mapsBudget } from '../lib/rateLimit.js';
 
 /**
  * Replaces the `google-maps-proxy` Supabase Edge Function.
@@ -42,6 +43,12 @@ mapsRouter.use((_req, _res, next) => {
   if (!env.mapsApiKey) return next(notFound('Maps integration is not configured'));
   next();
 });
+
+// Every route below this line spends money. The per-caller limit runs
+// first so that a request it rejects does not also consume the account's
+// hourly budget — the budget exists to bound the bill from many callers,
+// not to be drained by one that has already been told to stop.
+mapsRouter.use(mapsLimit, mapsBudget);
 
 /** Address -> coordinates, used when a pharmacy registers. */
 mapsRouter.get('/geocode', wrap(async (req, res) => {

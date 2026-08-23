@@ -2,6 +2,7 @@ import express from 'express';
 import { z, parse, uuid, pagination } from '../lib/validate.js';
 import { queryAll, queryOne, transaction } from '../db.js';
 import { requireAuth, clientIp } from '../auth/middleware.js';
+import { publicWriteLimit, codeLookupLimit } from '../lib/rateLimit.js';
 import { requirePharmacyRole, ROLES } from '../lib/authz.js';
 import { logAudit } from '../lib/audit.js';
 import { wrap, notFound, badRequest, conflict, forbidden } from '../lib/errors.js';
@@ -33,7 +34,7 @@ const reservationSchema = z.object({
  * Anonymous booking. No session required — this is how a patient reserves
  * medication before walking to the pharmacy.
  */
-reservationRouter.post('/', wrap(async (req, res) => {
+reservationRouter.post('/', publicWriteLimit, wrap(async (req, res) => {
   const body = parse(reservationSchema, req.body);
 
   // Only approved pharmacies can be booked, and the check happens here
@@ -81,7 +82,7 @@ reservationRouter.post('/', wrap(async (req, res) => {
 }));
 
 /** Look up your own booking by its reference code. */
-reservationRouter.get('/by-code/:code', wrap(async (req, res) => {
+reservationRouter.get('/by-code/:code', codeLookupLimit, wrap(async (req, res) => {
   const code = parse(z.string().trim().regex(/^RX-[A-Z0-9]{8}$/i, 'Invalid reference code'),
     req.params.code);
 
@@ -160,7 +161,7 @@ reservationRouter.patch('/:pharmacyId/:id', requireAuth, wrap(async (req, res) =
 
 export const requestRouter = express.Router();
 
-requestRouter.post('/', wrap(async (req, res) => {
+requestRouter.post('/', publicWriteLimit, wrap(async (req, res) => {
   const body = parse(
     z.object({
       pharmacy_id: uuid,
@@ -232,7 +233,7 @@ requestRouter.patch('/:pharmacyId/:id', requireAuth, wrap(async (req, res) => {
 export const wantedRouter = express.Router();
 
 /** Anonymous. This is the search dead-end turned into a signal. */
-wantedRouter.post('/', wrap(async (req, res) => {
+wantedRouter.post('/', publicWriteLimit, wrap(async (req, res) => {
   const body = parse(
     z.object({
       requested_query: z.string().trim().min(1).max(200),
