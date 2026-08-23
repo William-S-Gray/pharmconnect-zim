@@ -10,6 +10,11 @@
 #
 # Optionally set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD to also exercise
 # the super-admin routes; those checks are skipped when they are absent.
+#
+# One run fits inside the public rate limits (it registers six accounts
+# against a limit of ten an hour). A second run within the hour will not:
+# start the server with RATE_LIMIT_DISABLED=true for repeated runs, which
+# is honoured outside production only.
 set -uo pipefail
 
 BASE="${BASE:-http://localhost:4000}"
@@ -143,6 +148,14 @@ check "symptom intent detected" "$(jget 'intent')" symptom
 req GET '/api/search/intent?q=amoxicillin' - - >/dev/null
 check "drug intent detected"    "$(jget 'intent')" drug
 check "public pharmacy list"    "$(req GET /api/pharmacies/public - -)" 200
+
+# The public endpoints are unauthenticated, so their rate limits are the
+# only thing bounding what an anonymous caller can spend. This asserts the
+# limiter is actually mounted here — cheaply, by looking for the header it
+# sets, rather than by spending an allowance to provoke a 429.
+ratelimit_header=$(curl -s -o /dev/null -D - "$BASE/api/search?q=paracetamol" \
+  | grep -ci '^ratelimit-limit:')
+check "search advertises a rate limit" "$ratelimit_header" 1
 
 echo
 echo "== validation =="

@@ -75,6 +75,19 @@ export const env = {
 
   mapsApiKey: process.env.GOOGLE_MAPS_API_KEY ?? '',
 
+  // Ceiling on calls forwarded to Google per hour, across all callers.
+  // Every /api/maps/* request is billed to this account, so the per-caller
+  // limit is not enough on its own: a thousand addresses each staying
+  // politely under it still adds up to a bill. This is the number that
+  // caps the damage, and it is deliberately far above real traffic.
+  mapsHourlyBudget: Number(process.env.MAPS_HOURLY_BUDGET ?? 1000),
+
+  // Escape hatch for local work and the smoke suite, which registers
+  // several accounts from one address in a few seconds. Honoured only
+  // outside production — see lib/rateLimit.js — so setting it on a live
+  // deploy cannot quietly remove the limits.
+  rateLimitDisabled: process.env.RATE_LIMIT_DISABLED === 'true',
+
   /**
    * Outbound email, over plain SMTP so any provider works — Gmail with an
    * app password, Zoho, Brevo, SES, Postmark, a local relay. Deliberately

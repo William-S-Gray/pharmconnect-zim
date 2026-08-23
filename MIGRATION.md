@@ -101,6 +101,50 @@ src/lib/api.ts             typed API client (replaces supabaseClient.ts)
   is filtered per subscriber against their memberships.
 - **The POS agent no longer holds a service-role key.** It authenticates as
   an ordinary pharmacy admin, so it can only touch its own pharmacy.
+- **The public endpoints are rate limited** (`server/src/lib/rateLimit.js`).
+  Nothing authenticates search, reservations or the map proxy, so those
+  limits are the only bound on what an anonymous caller can spend — Neon
+  compute on search, and Google's bill on `/api/maps/*`. See below.
+
+---
+
+## Rate limiting
+
+Failed logins are counted in Postgres (`lib/audit.js`) because a limit on
+password guessing has to survive a restart. Everything else is counted in
+memory (`lib/rateLimit.js`): search and the map proxy are called constantly
+by normal use, so a database round trip to decide whether to allow a
+request would cost more than the request it protects.
+
+| Endpoint | Limit | What it protects |
+|---|---|---|
+| `GET /api/search` | 60/min | Neon compute — each call is a PostGIS query across every approved pharmacy's stock |
+| `GET /api/search/intent`, `/api/search/drugs` | 180/min | the same, loosely: the search bar debounces at 300ms and fires both together |
+| `/api/maps/*` per caller | 30/min | Google's bill |
+| `/api/maps/*` in total | `MAPS_HOURLY_BUDGET`, default 1000/hour | Google's bill, against *many* callers — the per-caller limit does nothing there |
+| `POST /api/reservations`, `/api/requests`, `/api/wanted` | 20/hour, shared | a pharmacist's attention |
+| `GET /api/reservations/by-code/:code` | 30/10min | reference codes are `RX-` plus 8 characters, and guessable by design |
+| `POST /api/auth/register` | 10/hour | account spam, and the administrator alert each one sends |
+| `POST /api/auth/password/forgot` | 10/hour per IP, 3/hour per email | one host walking an email list, and one victim's inbox being filled with genuine reset links |
+| `POST /api/auth/password/reset` | 20/hour | token guessing costing a limit rather than unlimited lookups |
+
+Three things follow from holding the counters in memory:
+
+- **They are per instance.** Two API instances mean two counters and, in
+  effect, double every limit. Correct today because Render runs one;
+  scaling out needs a shared store, not a bigger number.
+- **A deploy forgives everyone.** Acceptable — these exist to stop
+  sustained abuse and runaway cost, not to punish a burst.
+- **Anonymous callers behind one carrier NAT share a bucket**, which is
+  common on Zimbabwean mobile networks. That is why the public limits sit
+  well above what a person can generate by hand rather than at the
+  tightest value that would still work. Signed-in callers are keyed by
+  user id instead, so a pharmacy's staff on one office connection are
+  counted individually.
+
+`RATE_LIMIT_DISABLED=true` turns them off for local work and repeated
+smoke runs. It is honoured only when `NODE_ENV` is not `production`, so
+setting it on a live deploy cannot quietly remove the protection.
 
 ---
 
@@ -256,9 +300,12 @@ node test/smtp-sink.js 2525 /tmp/smtp-sink.log &
 ```
 npx tsc --noEmit          0 errors   (was 14 pre-existing)
 npm run build             passes
-node --test               18 passed
-./test/smoke.sh           59 passed, 0 failed
+node --test               31 passed
+./test/smoke.sh           51 passed, 0 failed, 1 skipped
 ```
+
+The skip is the super-admin block, which runs only with `SEED_ADMIN_EMAIL`
+and `SEED_ADMIN_PASSWORD` set; with them it is 60 checks.
 
 The smoke suite asserts denials as well as successes — the gate-1
 escalation (`self-assigned global_role ignored at signup`) and cross-tenant
@@ -327,16 +374,15 @@ restriction pointless. See `GOOGLE_MAPS_GUIDE.md`.
 ## Outstanding
 
 1. **SMS.** The `send-test-sms` edge function has no replacement. The UI
-   now says so plainly instead of reporting a fake success.
-2. **Rate limiting** covers failed logins only. The public reservation,
-   search and `/api/maps/*` endpoints are unthrottled — and the maps ones
-   cost real money per call. Worth doing before launch.
-3. **Single-session revoke.** `SecurityAuditPage` lists every session
+   now says so plainly instead of reporting a fake success — but the
+   subscription page still sells "SMS Stock Alerts" as a paid feature,
+   which is a promise with no backend behind it.
+2. **Single-session revoke.** `SecurityAuditPage` lists every session
    individually, but revoking one signs out all other devices; there is no
    per-session endpoint yet. The UI says so rather than pretending.
-4. **Backup codes** for 2FA are shown in the UI but not generated or
+3. **Backup codes** for 2FA are shown in the UI but not generated or
    stored. Losing an authenticator currently means an admin reset.
-5. **Email deliverability.** Sending works, but a new domain lands in spam
+4. **Email deliverability.** Sending works, but a new domain lands in spam
    without DNS records. Set SPF, DKIM and DMARC for whatever domain
    `EMAIL_FROM` uses — a password reset in the junk folder is the same as
    no password reset.

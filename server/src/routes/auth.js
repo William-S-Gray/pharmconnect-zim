@@ -9,6 +9,9 @@ import {
 } from '../auth/session.js';
 import { generateSecret, verifyTotp, otpauthUrl } from '../auth/totp.js';
 import { requireAuth, clientIp } from '../auth/middleware.js';
+import {
+  signupLimit, passwordForgotIpLimit, passwordForgotEmailLimit, passwordResetLimit,
+} from '../lib/rateLimit.js';
 import { logAudit, logLoginAttempt, checkLoginRateLimit } from '../lib/audit.js';
 import { membershipsOf } from '../lib/authz.js';
 import { wrap, unauthorized, badRequest, tooMany, conflict, notFound } from '../lib/errors.js';
@@ -118,7 +121,7 @@ const registerSchema = z.object({
     .optional(),
 });
 
-authRouter.post('/register', wrap(async (req, res) => {
+authRouter.post('/register', signupLimit, wrap(async (req, res) => {
   const body = parse(registerSchema, req.body);
 
   const existing = await queryOne(`SELECT id FROM app_users WHERE LOWER(email) = $1`, [body.email]);
@@ -302,32 +305,37 @@ authRouter.get('/me', wrap(async (req, res) => {
 // Password management
 // ------------------------------------------------------------------
 
-authRouter.post('/password/forgot', wrap(async (req, res) => {
-  const { email } = parse(z.object({ email: emailSchema }), req.body);
+authRouter.post(
+  '/password/forgot',
+  passwordForgotIpLimit,
+  passwordForgotEmailLimit,
+  wrap(async (req, res) => {
+    const { email } = parse(z.object({ email: emailSchema }), req.body);
 
-  const user = await queryOne(`SELECT id FROM app_users WHERE LOWER(email) = $1`, [email]);
+    const user = await queryOne(`SELECT id FROM app_users WHERE LOWER(email) = $1`, [email]);
 
-  if (user) {
-    const token = crypto.randomBytes(32).toString('base64url');
-    await query(
-      `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
-       VALUES ($1, 'password_reset', $2, now() + ($3 || ' minutes')::interval)`,
-      [user.id, hashAuthToken(token), String(TOKEN_TTL_MINUTES)],
-    );
-    logAudit({ eventType: 'password_reset_requested', userId: user.id, ip: clientIp(req) });
+    if (user) {
+      const token = crypto.randomBytes(32).toString('base64url');
+      await query(
+        `INSERT INTO auth_tokens (user_id, purpose, token_hash, expires_at)
+         VALUES ($1, 'password_reset', $2, now() + ($3 || ' minutes')::interval)`,
+        [user.id, hashAuthToken(token), String(TOKEN_TTL_MINUTES)],
+      );
+      logAudit({ eventType: 'password_reset_requested', userId: user.id, ip: clientIp(req) });
 
-    // Awaited so a provider failure is logged against this request rather
-    // than surfacing as an unhandled rejection later. sendMail never
-    // throws, so this cannot change the response.
-    await sendPasswordReset({ to: email, token, expiresInMinutes: TOKEN_TTL_MINUTES });
-  }
+      // Awaited so a provider failure is logged against this request rather
+      // than surfacing as an unhandled rejection later. sendMail never
+      // throws, so this cannot change the response.
+      await sendPasswordReset({ to: email, token, expiresInMinutes: TOKEN_TTL_MINUTES });
+    }
 
-  // Always the same response. Varying it by whether the account exists
-  // turns this endpoint into an account enumeration oracle.
-  res.json({ ok: true });
-}));
+    // Always the same response. Varying it by whether the account exists
+    // turns this endpoint into an account enumeration oracle.
+    res.json({ ok: true });
+  }),
+);
 
-authRouter.post('/password/reset', wrap(async (req, res) => {
+authRouter.post('/password/reset', passwordResetLimit, wrap(async (req, res) => {
   const body = parse(
     z.object({ token: z.string().min(1), password: passwordSchema }),
     req.body,

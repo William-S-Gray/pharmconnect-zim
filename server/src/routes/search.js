@@ -3,6 +3,7 @@ import { z, parse } from '../lib/validate.js';
 import { queryAll, query } from '../db.js';
 import { expandSymptoms, detectIntent } from '../lib/symptoms.js';
 import { wrap } from '../lib/errors.js';
+import { searchLimit, typeaheadLimit } from '../lib/rateLimit.js';
 
 export const searchRouter = express.Router();
 
@@ -28,7 +29,7 @@ const searchSchema = z.object({
  *    here as a parameter, so the SQL is fixed text with bound parameters
  *    instead of a query built around a CASE over user input.
  */
-searchRouter.get('/', wrap(async (req, res) => {
+searchRouter.get('/', searchLimit, wrap(async (req, res) => {
   const params = parse(searchSchema, req.query);
   const keywords = expandSymptoms(params.q);
   const hasPoint = params.lat !== undefined && params.lng !== undefined;
@@ -105,7 +106,7 @@ searchRouter.get('/', wrap(async (req, res) => {
 }));
 
 /** Intent classification on its own, for the search bar's live hinting. */
-searchRouter.get('/intent', wrap(async (req, res) => {
+searchRouter.get('/intent', typeaheadLimit, wrap(async (req, res) => {
   const { q } = parse(z.object({ q: z.string().trim().max(120).default('') }), req.query);
   const intent = detectIntent(q);
 
@@ -118,7 +119,7 @@ searchRouter.get('/intent', wrap(async (req, res) => {
 }));
 
 /** Typeahead over the drug catalogue, for the stock-entry form. */
-searchRouter.get('/drugs', wrap(async (req, res) => {
+searchRouter.get('/drugs', typeaheadLimit, wrap(async (req, res) => {
   const { q, limit } = parse(
     z.object({
       q: z.string().trim().min(1).max(80),
