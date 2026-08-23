@@ -12,7 +12,8 @@
     "migrate": "node db/migrate.js",
     "seed:admin": "node db/seed-admin.js",
     "test": "node --test test/*.test.js",
-    "test:smoke": "./test/smoke.sh"
+    "test:smoke": "./test/smoke.sh",
+    "check:email-dns": "./test/check-email-dns.sh"
   },
   "dependencies": {
     "cookie-parser": "^1.4.7",

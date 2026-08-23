@@ -110,6 +110,79 @@ fall back to `localhost:4000`.
 
 ---
 
+## 3. Email DNS
+
+Mail sends without any of this. It just does not arrive: a domain nobody
+has vouched for goes to junk, and a password reset in a junk folder is the
+same as no password reset. Since February 2024 Gmail and Yahoo reject bulk
+mail outright when these are missing.
+
+**Two things must exist before a single record can be written**: a
+registered domain, and a chosen SMTP provider. The domain is what the
+records live on; the provider is what they authorise. `EMAIL_FROM` must
+then be an address *at that domain* — the whole scheme checks that the
+visible From matches the domain that authenticated the message, so mail
+sent as `you@gmail.com` through your own provider fails no matter how
+correct your records are.
+
+### The three records
+
+Replace `example.co.zw` with your domain. Your provider's dashboard prints
+its own exact values — paste those; this is what to expect, not a
+substitute for them.
+
+| Purpose | Host | Type | Value |
+|---|---|---|---|
+| SPF | `@` (the root) | TXT | `v=spf1 include:<provider> ~all` |
+| DKIM | `<selector>._domainkey` | TXT or CNAME | issued by the provider — a public key, or a CNAME pointing at theirs |
+| DMARC | `_dmarc` | TXT | `v=DMARC1; p=none; rua=mailto:dmarc@example.co.zw; fo=1` |
+
+The `include:` depends on the provider. Each of these was confirmed to
+publish a live SPF record:
+
+| Provider | `include:` |
+|---|---|
+| Google Workspace | `_spf.google.com` |
+| Brevo | `spf.brevo.com` |
+| Zoho | `zohomail.com` |
+| Amazon SES | `amazonses.com` |
+| Postmark | `spf.mtasv.net` |
+| Mailgun | `mailgun.org` |
+| SendGrid | `sendgrid.net` |
+
+### What actually goes wrong
+
+- **Two SPF records is worse than none.** RFC 7208 permits exactly one per
+  domain; a second does not merge with the first, it makes receivers fail
+  the check outright. Adding a provider means editing the existing record,
+  never adding another.
+- **An empty `p=` in a DKIM record is a revocation**, not a placeholder.
+  The record exists, looks configured, and fails every signature.
+- **Start at `p=none`.** DMARC's policy applies to mail that fails, and the
+  first thing it usually catches is your own forgotten sender. Read the
+  `rua` reports for a couple of weeks, then move to `p=quarantine` and only
+  then `p=reject`. Going straight to reject silently discards real mail.
+- **`~all`, not `+all`.** `+all` authorises the entire internet to send as
+  you, which is worse than publishing nothing.
+
+### Checking it
+
+```bash
+cd server
+./test/check-email-dns.sh example.co.zw            # probes common selectors
+./test/check-email-dns.sh example.co.zw brevo1     # or name yours
+```
+
+Exits non-zero if SPF, DKIM or DMARC is missing or broken. It queries over
+DNS-over-HTTPS rather than the local resolver, which is the component most
+likely to be answering from a stale cache — a record can look absent for
+hours after you add it if you only ask your own machine.
+
+Records take up to a few hours to propagate, and the provider will not
+mark the domain verified until it sees them.
+
+---
+
 ## Health endpoints
 
 | Path | Checks | Use for |
